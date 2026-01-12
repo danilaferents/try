@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Berlin Trams</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      position: relative;
+      z-index: 0;
+      background: #d5d5d5;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: rgba(0,0,0,0.06);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background-image: url("assets/neslogo.png");
+      background-repeat: repeat;
+      background-size: 90px 90px;
+      opacity: 0.08;
+    }
+
+    #container {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+    }
+
+    #ui {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.92);
+      border-radius: 8px;
+      font-size: 12px;
+      z-index: 10;
+      line-height: 1.35;
+      min-width: 320px;
+    }
+
+    .row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+    .label { display: inline-block; width: 92px; }
+    .val { display: inline-block; width: 60px; text-align: right; }
+    input[type="range"] { width: 180px; }
+    button {
+      font-size: 12px; padding: 6px 8px; border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.15); background: white; cursor: pointer;
+    }
+    button:hover { background: rgba(255,255,255,0.92); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hr { height: 1px; background: rgba(0,0,0,0.12); margin: 10px 0; }
+    .small { font-size: 11px; opacity: 0.8; }
+
+    /* HUD panels */
+    #setupHUD {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #setupWrap{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+    }
+
+    #graphHUD {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Topology HUD (BOTTOM-RIGHT) */
+    #topologyHUD{
+      position:absolute;
+      right:10px;
+      bottom:10px;
+      z-index:10;
+      pointer-events:none;
+    }
+
+    .panel {
+      pointer-events: auto;
+      width: 450px;
+      background: rgba(255,255,255,0.92);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .panelHeader {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 8px;
+    }
+
+    .panelTitle { font-weight: 700; font-size: 12px; }
+
+    #graphBox {
+      height: 250px;
+      border-radius: 8px;
+      border: 1px dashed rgba(0,0,0,0.25);
+      background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+      overflow: hidden;
+    }
+
+    /* Topology box */
+    #topologyBox{
+      height:180px;
+      border-radius:8px;
+      border:1px dashed rgba(0,0,0,0.25);
+      background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+      overflow:hidden;
+    }
+    #topologyPanel{
+      width: 340px;
+    }
+
+    .fieldRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .fieldRow label { font-size: 12px; }
+    select {
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,0.15);
+      background: white;
+      min-width: 150px;
+    }
+
+    /* Tabs */
+    .tabsCol{
+      pointer-events:auto;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top: 2px;
+    }
+    .tabBtn{
+      font-size:12px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,0.18);
+      background: rgba(255,255,255,0.4);
+      cursor:pointer;
+      text-align:left;
+      min-width: 132px;
+      font-weight: 700;
+    }
+    .tabBtn.active{
+      background: white;
+      border-color: rgba(0,0,0,0.28);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+    }
+
+    /* Collapsible bottom-left UI */
+    #ui .uiBody { margin-top: 8px; }
+    #ui.collapsed .uiBody { display: none; }
+
+    /* Snapshots list */
+    #snapshotsBody{
+      display:none;
+      margin-top: 8px;
+      max-height: 420px;
+      overflow:auto;
+      padding-right: 6px;
+    }
+    .shot{
+      border:1px solid rgba(0,0,0,0.10);
+      border-radius:10px;
+      background: rgba(255,255,255,0.7);
+      padding:8px;
+      margin-top:10px;
+    }
+    .shotTitle{
+      font-weight:700;
+      font-size:12px;
+      margin-bottom:6px;
+      line-height:1.2;
+    }
+    .shotMeta{
+      font-size:11px;
+      opacity:0.8;
+      margin-bottom:8px;
+    }
+    .shotImg{
+      width:100%;
+      border-radius:8px;
+      border:1px dashed rgba(0,0,0,0.20);
+      display:block;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+<div id="container"></div>
+
+<!-- Setup: TOP-LEFT -->
+<div id="setupHUD">
+  <div id="setupWrap">
+    <div class="panel" id="setupPanel">
+      <div class="panelHeader">
+        <div class="panelTitle">Setup</div>
+      </div>
+
+      <!-- Visualization setup -->
+      <div id="setupBody">
+        <div class="fieldRow">
+          <label for="totalNodes">Number of nodes</label>
+          <select id="totalNodes"></select>
+        </div>
+
+        <div class="fieldRow">
+          <label for="mobileNodes">Number of mobile nodes</label>
+          <select id="mobileNodes"></select>
+        </div>
+
+        <div class="fieldRow">
+          <label for="cameraMode">Rate of topology changes</label>
+          <select id="cameraMode">
+            <option value="500">500ms</option>
+            <option value="1000" selected>1s</option>
+            <option value="2000">2s</option>
+            <option value="4000">4s</option>
+          </select>
+        </div>
+
+        <div class="fieldRow">
+          <label for="reconfigMode">Reconfiguration</label>
+          <select id="reconfigMode">
+            <option value="holistic" selected>Holistic</option>
+            <option value="incremental">Incremental</option>
+          </select>
+        </div>
+
+        <div class="fieldRow">
+          <button id="applyConfigBtn" type="button">Apply (Start)</button>
+          <button id="stopBtn" type="button" disabled>Stop</button>
+          <button id="resetViewBtn" type="button">Reset view</button>
+        </div>
+
+        <div class="small" id="pendingHint" style="margin-top:6px; opacity:0.7;">
+          Changes apply only when you click <b>Apply</b>.
+        </div>
+      </div>
+
+      <!-- Snapshots view -->
+      <div id="snapshotsBody">
+        <div class="small" style="opacity:0.8;">
+          Saved runs appear here after you press <b>Stop</b>.
+        </div>
+        <div id="snapshotsList"></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabsCol" role="tablist" aria-label="Mode">
+      <button id="tabViz" class="tabBtn active" type="button">Visualization</button>
+      <button id="tabSnapshots" class="tabBtn" type="button">Snapshots</button>
+    </div>
+  </div>
+</div>
+
+<!-- Graph: TOP-RIGHT -->
+<div id="graphHUD">
+  <div class="panel" id="graphPanel">
+    <div class="panelHeader">
+      <div class="panelTitle" id="graphTitle">—</div>
+    </div>
+
+    <div id="graphBox">
+      <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Topology graph: BOTTOM-RIGHT -->
+<div id="topologyHUD">
+  <div class="panel" id="topologyPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Topology graph</div>
+    </div>
+
+    <div id="topologyBox">
+      <canvas id="topologyCanvas" style="width:100%; height:100%; border-radius:8px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom-left UI (hideable) -->
+<div id="ui" class="collapsed">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <b>Train settings</b>
+      <button id="toggleUIBtn" type="button" title="Hide/Show panel">Hide</button>
+    </div>
+  </div>
+
+  <div class="uiBody">
+    <div class="row">
+      <span class="label">Trains</span>
+      <input id="trainCount" type="range" min="1" max="8" value="2" disabled />
+      <span id="trainCountVal" class="val">2</span>
+    </div>
+
+    <div class="row">
+      <span class="label">Speed</span>
+      <input id="speed" type="range" min="0.000" max="0.1" step="0.001" value="0.03" />
+      <span id="speedVal" class="val">0.030</span>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const MODEL_URL = 'models/gltf/Berlin.glb';
+const MAX_PIXEL_RATIO = 1.5;
+
+const INIT = {
+  target: new THREE.Vector3(214, 0, -5000),
+  modelPos: new THREE.Vector3(734, -3291, -419),
+  cam: { dist: 7800, yaw: 0, elev: -43 }
+};
+
+// -----------------------------------------------------
+// THREE (must be created BEFORE loader.load uses them)
+// -----------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.setClearColor(0x000000, 0);
+document.getElementById('container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = null;
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 300000);
+camera.position.set(0, 600, 900);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.zoomSpeed = 1.0;
+controls.panSpeed = 0.9;
+controls.rotateSpeed = 0.7;
+controls.minPolarAngle = 0.05;
+controls.maxPolarAngle = Math.PI - 0.05;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a1a44, 1.8));
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+sun.position.set(2000, 4000, 1000);
+scene.add(sun);
+
+// -----------------------------------------------------
+// CONFIG
+// -----------------------------------------------------
+const totalNodesEl = document.getElementById('totalNodes');
+const mobileNodesEl = document.getElementById('mobileNodes');
+const cameraModeEl  = document.getElementById('cameraMode');
+const reconfigModeEl = document.getElementById('reconfigMode');
+
+const applyConfigBtn = document.getElementById('applyConfigBtn');
+const stopBtn = document.getElementById('stopBtn');
+const resetViewBtn = document.getElementById('resetViewBtn');
+const graphTitleEl = document.getElementById('graphTitle');
+
+const tabVizEl = document.getElementById('tabViz');
+const tabSnapshotsEl = document.getElementById('tabSnapshots');
+const setupBodyEl = document.getElementById('setupBody');
+const snapshotsBodyEl = document.getElementById('snapshotsBody');
+const graphHUDEl = document.getElementById('graphHUD');
+const topologyHUDEl = document.getElementById('topologyHUD');
+const snapshotsListEl = document.getElementById('snapshotsList');
+
+function msToLabel(ms){
+  if (ms >= 1000) return `${(ms/1000)}s`;
+  return `${ms}ms`;
+}
+
+function fillSelectRange(selectEl, min, max) {
+  selectEl.innerHTML = '';
+  for (let v = min; v <= max; v++) {
+    const opt = document.createElement('option');
+    opt.value = String(v);
+    opt.textContent = String(v);
+    selectEl.appendChild(opt);
+  }
+}
+
+fillSelectRange(totalNodesEl, 2, 16);
+totalNodesEl.value = '4';
+
+function rebuildMobileOptionsPreserveSelection(){
+  const total = parseInt(totalNodesEl.value, 10);
+  const maxMobile = Math.min(total, 8);
+
+  const current = parseInt(mobileNodesEl.value || '2', 10);
+  fillSelectRange(mobileNodesEl, 2, maxMobile);
+
+  const clamped = Math.min(Math.max(current, 2), maxMobile);
+  mobileNodesEl.value = String(clamped);
+}
+rebuildMobileOptionsPreserveSelection();
+mobileNodesEl.value = '2';
+
+cameraModeEl.value = '1000';
+reconfigModeEl.value = 'holistic';
+
+// active config (applied only on Apply)
+let activeConfig = {
+  totalNodes: 4,
+  mobileNodes: 2,
+  topoChangeMs: 1000,
+  reconfigMode: 'holistic'
+};
+
+function setGraphTitleFromActive(extra = ''){
+  const c = activeConfig;
+  const base = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
+  graphTitleEl.textContent = extra ? `${base} — ${extra}` : base;
+}
+
+totalNodesEl.addEventListener('change', rebuildMobileOptionsPreserveSelection);
+
+// -----------------------------------------------------
+// EXPERIMENT STATE
+// -----------------------------------------------------
+let exp = {
+  running: false,
+  startMs: 0,
+  stopMs: 0,
+  tickTimer: null,
+  points: [],
+  maxPoints: 2500,
+  lastTopoEventMs: 0,
+  frozen: false,
+
+  // keep x-axis scrolling after stop (without new points)
+  scrollAfterStop: false,
+
+  holistic: {
+    phase: 'idle',       // 'idle' | 'ramping' | 'frozen'
+    rampStartMs: 0,
+    rampDurationMs: 10000,
+    baseAtRampStart: 0,
+    jumpTarget: 0,
+  }
+};
+
+function nowMs(){ return performance.now(); }
+
+function resetExperimentGraph(){
+  exp.points = [];
+  exp.frozen = false;
+  exp.lastTopoEventMs = 0;
+
+  exp.scrollAfterStop = false;
+
+  exp.holistic.phase = 'idle';
+  exp.holistic.rampStartMs = 0;
+  exp.holistic.baseAtRampStart = 0;
+  exp.holistic.jumpTarget = 0;
+}
+
+// -----------------------------------------------------
+// GRAPH — LOG Y AXIS + DYNAMIC X TICKS
+// -----------------------------------------------------
+const graphCanvas = document.getElementById('graphCanvas');
+const gctx = graphCanvas?.getContext('2d');
+
+const Y_MIN = 10;
+const Y_MAX = 1e4;
+const LOG_MIN = Math.log10(Y_MIN);
+const LOG_MAX = Math.log10(Y_MAX);
+
+function resizeGraphCanvasToCSS() {
+  if (!graphCanvas) return;
+  const rect = graphCanvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  graphCanvas.width  = Math.max(1, Math.floor(rect.width  * dpr));
+  graphCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+
+  if (gctx) gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const SUPER = { 1: '¹', 2: '²', 3: '³', 4: '⁴' };
+
+function drawGraph(points) {
+  if (!gctx || !graphCanvas) return;
+
+  const ctx = gctx;
+  const rect = graphCanvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  const pad = { l: 56, r: 14, t: 14, b: 34 };
+  const x0 = pad.l;
+  const y0 = pad.t;
+  const x1 = w - pad.r;
+  const y1 = h - pad.b;
+
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.02)';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x0, y1);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+
+  const yAt = (v) => {
+    const lv = Math.log10(Math.max(v, Y_MIN));
+    const t = (lv - LOG_MIN) / (LOG_MAX - LOG_MIN);
+    return y0 + (1 - t) * (y1 - y0);
+  };
+
+  // Y grid + labels
+  ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  [10, 100, 1000, 10000].forEach(v => {
+    const y = yAt(v);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x1, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 5, y);
+    ctx.lineTo(x0, y);
+    ctx.stroke();
+
+    const expn = Math.round(Math.log10(v));
+    ctx.fillText(`10${SUPER[expn]}`, x0 - 8, y);
+  });
+
+  // X axis time range
+  const hasData = points.length >= 2;
+
+  const tNowSec = exp.startMs ? ((nowMs() - exp.startMs) / 1000) : 0;
+  const tMaxData = hasData ? points[points.length - 1].tSec : 0;
+
+  // NOTE: if scrollAfterStop=false, axis uses last data time after stop
+  const tMaxAxis = (exp.running || exp.scrollAfterStop) ? tNowSec : tMaxData;
+  const tMin = Math.max(0, tMaxAxis - 150);
+
+  const xAtT = (t) => {
+    const tt = (t - tMin) / Math.max(1e-6, (tMaxAxis - tMin));
+    return x0 + tt * (x1 - x0);
+  };
+
+  // --- DYNAMIC X TICKS (1,2,3,4,5,6,7,8,... continuing) ---
+  ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  const span = Math.max(0.001, (tMaxAxis - tMin));
+  const MAX_TICKS = 10;
+
+  function niceStep(raw){
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / p;
+    if (n <= 1) return 1 * p;
+    if (n <= 2) return 2 * p;
+    if (n <= 5) return 5 * p;
+    return 10 * p;
+  }
+  const step = niceStep(span / MAX_TICKS);
+
+  let tTick = Math.ceil(tMin / step) * step;
+
+  for (; tTick <= tMaxAxis + 1e-6; tTick += step) {
+    const x = xAtT(tTick);
+
+    // vertical grid
+    ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x, y1);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // tick mark
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(x, y1);
+    ctx.lineTo(x, y1 + 5);
+    ctx.stroke();
+
+    // label as seconds (integer-ish when possible)
+    const isIntish = Math.abs(step - Math.round(step)) < 1e-6;
+    const label = isIntish ? String(Math.round(tTick)) : (step < 1 ? tTick.toFixed(1) : tTick.toFixed(0));
+    ctx.fillText(label, x, y1 + 8);
+  }
+
+  // Area series
+  if (points.length >= 2) {
+    ctx.fillStyle = 'rgba(115, 190, 110, 0.80)';
+    ctx.beginPath();
+
+    let started = false;
+    for (let i = 0; i < points.length; i++) {
+      const pt = points[i];
+      if (pt.tSec < tMin) continue;
+      const x = xAtT(pt.tSec);
+      const y = yAt(pt.v) - 16;
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+
+    for (let i = points.length - 1; i >= 0; i--) {
+      const pt = points[i];
+      if (pt.tSec < tMin) continue;
+      const x = xAtT(pt.tSec);
+      const y = yAt(pt.v) + 16;
+      ctx.lineTo(x, y);
+    }
+
+    ctx.closePath();
+    ctx.fill();
+
+    // datapoint dots (subsample)
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    const dotStep = Math.max(1, Math.floor(points.length / 120));
+    for (let i = 0; i < points.length; i += dotStep) {
+      const pt = points[i];
+      if (pt.tSec < tMin) continue;
+      const x = xAtT(pt.tSec);
+      const y = yAt(pt.v);
+      ctx.beginPath();
+      ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // axis labels
+  ctx.fillStyle = 'rgba(0,0,0,0.70)';
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('runtime (sec.)', (x0 + x1) / 2, h - 10);
+
+  ctx.save();
+  ctx.translate(18, (y0 + y1) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('event-time latency', 0, 0);
+  ctx.restore();
+
+  // status label + runtime overlay
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  const status = exp.running ? (exp.frozen ? 'RUNNING (graph frozen)' : 'RUNNING') : 'STOPPED';
+  ctx.fillText(status, x0 + 6, y0 + 12);
+
+  ctx.textAlign = 'right';
+  const rt = exp.running ? ((nowMs() - exp.startMs)/1000) : ((exp.stopMs - exp.startMs)/1000);
+  const rtSafe = Number.isFinite(rt) ? rt : 0;
+  ctx.fillText(`${rtSafe.toFixed(1)}s`, x1 - 6, y0 + 12);
+}
+
+function renderGraph(){
+  resizeGraphCanvasToCSS();
+  drawGraph(exp.points);
+}
+window.addEventListener('resize', renderGraph);
+renderGraph();
+
+// -----------------------------------------------------
+// TOPOLOGY GRAPH (placeholder)
+// -----------------------------------------------------
+const topoCanvas = document.getElementById('topologyCanvas');
+const tctx = topoCanvas?.getContext('2d');
+
+function resizeTopoCanvasToCSS() {
+  if (!topoCanvas) return;
+  const rect = topoCanvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  topoCanvas.width  = Math.max(1, Math.floor(rect.width  * dpr));
+  topoCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+
+  if (tctx) tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function autoFit(ctx, w, h, drawFn) {
+  const pad = 18;
+  const DW = 420;
+  const DH = 300;
+
+  const sx = (w - pad * 2) / DW;
+  const sy = (h - pad * 2) / DH;
+  const s = Math.min(sx, sy) * 1.4;
+
+  ctx.save();
+  ctx.translate((w - DW * s) / 2, (h - DH * s) / 2);
+  ctx.scale(s, s);
+  drawFn();
+  ctx.restore();
+}
+
+function drawRectNode(ctx, x, y, label, opts = {}) {
+  const ww = opts.w ?? 74;
+  const hh = opts.h ?? 34;
+  const rr = opts.r ?? 10;
+  const stroke = opts.stroke ?? '#243cff';
+  const fill = opts.fill ?? 'rgba(255,255,255,0.85)';
+
+  const x0 = x - ww / 2;
+  const y0 = y - hh / 2;
+
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = fill;
+
+  ctx.beginPath();
+  const r = Math.min(rr, ww / 2, hh / 2);
+  ctx.moveTo(x0 + r, y0);
+  ctx.arcTo(x0 + ww, y0,      x0 + ww, y0 + hh, r);
+  ctx.arcTo(x0 + ww, y0 + hh, x0,      y0 + hh, r);
+  ctx.arcTo(x0,      y0 + hh, x0,      y0,      r);
+  ctx.arcTo(x0,      y0,      x0 + ww, y0,      r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#111';
+  ctx.font = '700 13px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y);
+
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color = '#243cff', w = 3) {
+  const head = 12;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const a = Math.atan2(dy, dx);
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - head * Math.cos(a - Math.PI/7), y2 - head * Math.sin(a - Math.PI/7));
+  ctx.lineTo(x2 - head * Math.cos(a + Math.PI/7), y2 - head * Math.sin(a + Math.PI/7));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawTopologyPlaceholder() {
+  if (!tctx || !topoCanvas) return;
+
+  const ctx = tctx;
+  const rect = topoCanvas.getBoundingClientRect();
+  const W = rect.width;
+  const H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(0,0,0,0.01)';
+  ctx.fillRect(0, 0, W, H);
+
+  autoFit(ctx, W, H, () => {
+    const DW = 420;
+    const cx = DW * 0.5;
+    const yTop = 32;
+
+    const MN1 = { x: cx - 95, y: yTop + 220 };
+    const MN2 = { x: cx + 95, y: yTop + 220 };
+
+    const FN1 = { x: cx - 95, y: yTop + 140 };
+    const FN2 = { x: cx + 95, y: yTop + 140 };
+
+    const FN3 = { x: cx,      y: yTop + 70  };
+
+    const MN3 = { x: cx - 80, y: yTop + 20  };
+    const MN4 = { x: cx + 80, y: yTop + 20  };
+
+    drawArrow(ctx, MN1.x, MN1.y - 18, FN1.x, FN1.y + 18);
+    drawArrow(ctx, MN2.x, MN2.y - 18, FN2.x, FN2.y + 18);
+
+    drawArrow(ctx, FN1.x, FN1.y - 18, FN3.x - 14, FN3.y + 18);
+    drawArrow(ctx, FN2.x, FN2.y - 18, FN3.x + 14, FN3.y + 18);
+
+    drawArrow(ctx, FN3.x - 14, FN3.y - 18, MN3.x + 14, MN3.y + 18);
+    drawArrow(ctx, FN3.x + 14, FN3.y - 18, MN4.x - 14, MN4.y + 18);
+
+    drawRectNode(ctx, MN3.x, MN3.y, 'FN4');
+    drawRectNode(ctx, MN4.x, MN4.y, 'FN5');
+    drawRectNode(ctx, FN3.x, FN3.y, 'FN3');
+
+    drawRectNode(ctx, FN1.x, FN1.y, 'FN1');
+    drawRectNode(ctx, FN2.x, FN2.y, 'FN2');
+
+    drawRectNode(ctx, MN1.x, MN1.y, 'MN1');
+    drawRectNode(ctx, MN2.x, MN2.y, 'MN2');
+  });
+}
+
+function renderTopology() {
+  resizeTopoCanvasToCSS();
+  drawTopologyPlaceholder();
+}
+renderTopology();
+window.addEventListener('resize', renderTopology);
+
+// -----------------------------------------------------
+// SNAPSHOTS (FIXED: add snapshots without switching tabs)
+// -----------------------------------------------------
+const snapshots = []; // { title, runtimeSec, dataUrl, when }
+
+function addSnapshot(){
+  // Ensure the canvas is fully rendered before capture
+  renderGraph();
+
+  const c = activeConfig;
+  const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
+
+  const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
+
+  const dataUrl = graphCanvas.toDataURL('image/png');
+
+  snapshots.unshift({
+    title,
+    runtimeSec,
+    dataUrl,
+    when: new Date().toLocaleString()
+  });
+
+  renderSnapshotsList();
+}
+
+function renderSnapshotsList(){
+  if (!snapshotsListEl) return;
+  snapshotsListEl.innerHTML = '';
+
+  if (!snapshots.length){
+    const empty = document.createElement('div');
+    empty.className = 'small';
+    empty.style.opacity = '0.75';
+    empty.style.marginTop = '10px';
+    empty.textContent = 'No snapshots yet.';
+    snapshotsListEl.appendChild(empty);
+    return;
+  }
+
+  for (const s of snapshots){
+    const wrap = document.createElement('div');
+    wrap.className = 'shot';
+
+    const t = document.createElement('div');
+    t.className = 'shotTitle';
+    t.textContent = s.title;
+
+    const m = document.createElement('div');
+    m.className = 'shotMeta';
+    m.textContent = `Runtime: ${s.runtimeSec.toFixed(1)}s • ${s.when ?? ''}`;
+
+    const img = document.createElement('img');
+    img.className = 'shotImg';
+    img.src = s.dataUrl;
+    img.alt = s.title;
+
+    wrap.appendChild(t);
+    wrap.appendChild(m);
+    wrap.appendChild(img);
+
+    snapshotsListEl.appendChild(wrap);
+  }
+}
+renderSnapshotsList();
+
+// -----------------------------------------------------
+// BOTTOM-LEFT UI (speed user vs active)
+// -----------------------------------------------------
+const trainCountEl = document.getElementById('trainCount');
+const trainCountVal = document.getElementById('trainCountVal');
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+
+const uiEl = document.getElementById('ui');
+const toggleUIBtn = document.getElementById('toggleUIBtn');
+
+function syncToggleLabel() {
+  toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
+}
+syncToggleLabel();
+
+toggleUIBtn.addEventListener('click', () => {
+  uiEl.classList.toggle('collapsed');
+  syncToggleLabel();
+});
+
+const settings = {
+  trainCount: 2,
+  speedUser: parseFloat(speedEl.value),
+  speedActive: 0, // trains do NOT move at load
+};
+
+function syncUI() {
+  trainCountVal.textContent = String(settings.trainCount);
+  trainCountEl.value = String(settings.trainCount);
+  speedVal.textContent = settings.speedUser.toFixed(3);
+}
+syncUI();
+
+speedEl.addEventListener('input', () => {
+  settings.speedUser = parseFloat(speedEl.value);
+  syncUI();
+  if (exp.running) settings.speedActive = settings.speedUser;
+});
+
+// -----------------------------------------------------
+// TABS
+// -----------------------------------------------------
+function setTab(mode){
+  const isViz = mode === 'viz';
+
+  tabVizEl?.classList.toggle('active', isViz);
+  tabSnapshotsEl?.classList.toggle('active', !isViz);
+
+  // IMPORTANT: use explicit display values (not '')
+  if (setupBodyEl) setupBodyEl.style.display = isViz ? 'block' : 'none';
+  if (snapshotsBodyEl) snapshotsBodyEl.style.display = isViz ? 'none' : 'block';
+
+  if (graphHUDEl) graphHUDEl.style.display = isViz ? 'block' : 'none';
+  if (topologyHUDEl) topologyHUDEl.style.display = isViz ? 'block' : 'none';
+
+  if (isViz) {
+    renderGraph();
+    renderTopology();
+  } else {
+    renderSnapshotsList();
+  }
+}
+
+tabVizEl?.addEventListener('click', () => setTab('viz'));
+tabSnapshotsEl?.addEventListener('click', () => setTab('snapshots'));
+setTab('viz');
+
+// -----------------------------------------------------
+// EXPERIMENT DATA GENERATION
+// -----------------------------------------------------
+function clampY(v){ return Math.max(Y_MIN, Math.min(Y_MAX, v)); }
+
+function genBaseline(){
+  const base = 60;
+  const jitter = (Math.random() - 0.5) * base * 0.35;
+  const tinySpike = (Math.random() < 0.01) ? Math.random() * 500 : 0;
+  return clampY(base + jitter + tinySpike);
+}
+
+function startExperiment(){
+  activeConfig = {
+    totalNodes: parseInt(totalNodesEl.value, 10),
+    mobileNodes: parseInt(mobileNodesEl.value, 10),
+    topoChangeMs: parseInt(cameraModeEl.value, 10),
+    reconfigMode: reconfigModeEl.value
+  };
+
+  // trains match mobile nodes
+  settings.trainCount = activeConfig.mobileNodes;
+  syncUI();
+  ensureTrainCount(settings.trainCount);
+
+  // start moving now
+  settings.speedActive = settings.speedUser;
+
+  // reset graph
+  resetExperimentGraph();
+  exp.running = true;
+  exp.startMs = nowMs();
+  exp.lastTopoEventMs = exp.startMs;
+  exp.stopMs = exp.startMs;
+
+  setGraphTitleFromActive('running');
+  stopBtn.disabled = false;
+  applyConfigBtn.textContent = 'Apply (Restart)';
+
+  clearInterval(exp.tickTimer);
+  exp.tickTimer = setInterval(() => {
+    if (!exp.running) return;
+
+    const tMs = nowMs();
+    const tSec = (tMs - exp.startMs) / 1000;
+
+    const sinceTopo = tMs - exp.lastTopoEventMs;
+    const topoEvent = sinceTopo >= activeConfig.topoChangeMs;
+    if (topoEvent) exp.lastTopoEventMs = tMs;
+
+    if (activeConfig.reconfigMode === 'holistic') {
+      const base = genBaseline();
+
+      if (topoEvent && exp.holistic.phase === 'idle') {
+        exp.holistic.phase = 'ramping';
+        exp.holistic.rampStartMs = tMs;
+        exp.holistic.baseAtRampStart = base;
+        exp.holistic.jumpTarget = clampY(3500 + Math.random() * 2500);
+      }
+
+      if (exp.holistic.phase === 'idle') {
+        exp.points.push({ tSec, v: base });
+      } else if (exp.holistic.phase === 'ramping') {
+        const u = (tMs - exp.holistic.rampStartMs) / exp.holistic.rampDurationMs;
+        const uu = Math.min(1, Math.max(0, u));
+        const eased = uu * uu * (3 - 2 * uu); // smoothstep
+
+        const v = exp.holistic.baseAtRampStart +
+          eased * (exp.holistic.jumpTarget - exp.holistic.baseAtRampStart) +
+          (Math.random() - 0.5) * 120;
+
+        exp.points.push({ tSec, v: clampY(v) });
+
+        if (uu >= 1) {
+          exp.holistic.phase = 'frozen';
+          exp.frozen = true;
+        }
+      } else {
+        // frozen: do not add points
+      }
+    }
+
+    if (activeConfig.reconfigMode === 'incremental') {
+      const baseline = genBaseline();
+      if (topoEvent) {
+        const spike = clampY(3000);
+        exp.points.push({ tSec, v: spike });
+      } else {
+        exp.points.push({ tSec, v: baseline });
+      }
+    }
+
+    if (exp.points.length > exp.maxPoints) exp.points.splice(0, exp.points.length - exp.maxPoints);
+
+    renderGraph();
+  }, 10); // dense
+}
+
+function stopExperiment(){
+  if (!exp.running) return;
+
+  exp.running = false;
+  exp.stopMs = nowMs();
+
+  clearInterval(exp.tickTimer);
+  exp.tickTimer = null;
+
+  // FIX: do NOT auto-switch tabs; just add the snapshot.
+  // Also: freeze x-axis after stop (no more scrolling)
+  exp.scrollAfterStop = false;
+
+  // stop trains but keep user slider value
+  settings.speedActive = 0;
+
+  // render once so the snapshot captures final frame + title
+  setGraphTitleFromActive(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
+  renderGraph();
+
+  stopBtn.disabled = true;
+
+  // snapshot always added
+  addSnapshot();
+
+  // update list even if user stays on Visualization
+  renderSnapshotsList();
+}
+
+applyConfigBtn.addEventListener('click', startExperiment);
+stopBtn.addEventListener('click', stopExperiment);
+
+// -----------------------------------------------------
+// CAMERA VIEW HELPER
+// -----------------------------------------------------
+function setOrbitView(target, distance, yawDeg, elevationDeg) {
+  const yaw = THREE.MathUtils.degToRad(yawDeg);
+  const elevClampedDeg = THREE.MathUtils.clamp(elevationDeg, -89.5, 89.5);
+  const elev = THREE.MathUtils.degToRad(elevClampedDeg);
+  const phi = THREE.MathUtils.degToRad(90) - elev;
+
+  const offset = new THREE.Vector3().setFromSphericalCoords(distance, phi, yaw);
+  camera.position.copy(target).add(offset);
+  camera.lookAt(target);
+  controls.target.copy(target);
+  controls.update();
+}
+
+// -----------------------------------------------------
+// STATE (model / trains)
+// -----------------------------------------------------
+let rootRef = null;
+let trainPathMeshRef = null;
+let pathCurve = null;
+
+let rawTrainRef = null;
+let trainMeshPrototype = null;
+
+const trains = [];
+const trainData = [];
+
+let modelFixedQ = new THREE.Quaternion();
+
+let pathMesh = null;
+
+// -----------------------------------------------------
+// RESET (view + graph + trains to start)
+// -----------------------------------------------------
+function resetRunAndTrainsToStart(){
+  // stop experiment
+  exp.running = false;
+  exp.frozen = false;
+  exp.scrollAfterStop = false;
+
+  clearInterval(exp.tickTimer);
+  exp.tickTimer = null;
+
+  // clear graph
+  exp.points = [];
+  exp.lastTopoEventMs = 0;
+  exp.startMs = 0;
+  exp.stopMs = 0;
+
+  // stop trains
+  settings.speedActive = 0;
+
+  // reset train positions to beginning
+  for (let i = 0; i < trainData.length; i++) trainData[i].u = 0;
+
+  // snap train transforms immediately (so user sees it without waiting)
+  if (pathCurve && trains.length) {
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const p = new THREE.Vector3();
+    const t0 = new THREE.Vector3();
+    const t1 = new THREE.Vector3();
+    const fwd = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const up2 = new THREE.Vector3();
+    const basisM = new THREE.Matrix4();
+    const targetQ = new THREE.Quaternion();
+
+    for (let i = 0; i < trains.length; i++) {
+      const rig = trains[i];
+      const visual = rig.userData.visual;
+      const d = trainData[i];
+
+      pathCurve.getPointAt(d.u, p);
+      rig.position.copy(p);
+      rig.position.z -= 10;
+
+      pathCurve.getTangentAt(d.u, t0);
+      pathCurve.getTangentAt((d.u + 0.01) % 1, t1);
+      fwd.copy(t0).lerp(t1, 0.6).normalize();
+
+      right.copy(worldUp).cross(fwd);
+      if (right.lengthSq() < 1e-12) right.set(1, 0, 0);
+      right.normalize();
+
+      up2.copy(fwd).cross(right).normalize();
+
+      basisM.makeBasis(right, up2, fwd);
+      targetQ.setFromRotationMatrix(basisM);
+      targetQ.multiply(modelFixedQ);
+
+      visual.quaternion.copy(targetQ);
+    }
+  }
+
+  // UI
+  stopBtn.disabled = true;
+  applyConfigBtn.textContent = 'Apply (Start)';
+  setGraphTitleFromActive('idle');
+
+  renderGraph();
+}
+
+resetViewBtn?.addEventListener('click', () => {
+  // reset camera
+  setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
+
+  // clean graph + reset trains to start
+  resetRunAndTrainsToStart();
+
+  // keep user in viz view
+  setTab('viz');
+});
+
+// -----------------------------------------------------
+// TRAIN COUNT / PATH / MODEL HELPERS
+// -----------------------------------------------------
+function scorePolyline(pts) {
+  if (!pts || pts.length < 2) return 0;
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += pts[i].distanceTo(pts[i - 1]);
+  return len;
+}
+
+function extractOrderedCenterlineByGetter(mesh, root, binsCount, getU) {
+  root.updateWorldMatrix(true, true);
+  mesh.updateWorldMatrix(true, true);
+
+  const pos = mesh.geometry.attributes.position;
+  if (!pos) return null;
+
+  const X = new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(mesh.matrixWorld);
+
+  let uMin = Infinity, uMax = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const u = getU(i);
+    if (!Number.isFinite(u)) continue;
+    uMin = Math.min(uMin, u);
+    uMax = Math.max(uMax, u);
+  }
+  if (!Number.isFinite(uMin) || !Number.isFinite(uMax) || Math.abs(uMax - uMin) < 1e-9) return null;
+
+  const invRange = 1 / (uMax - uMin);
+  const bins = Array.from({ length: binsCount }, () => ({ sum: new THREE.Vector3(), n: 0 }));
+  const v = new THREE.Vector3();
+
+  for (let i = 0; i < pos.count; i++) {
+    let u = getU(i);
+    if (!Number.isFinite(u)) continue;
+    u = (u - uMin) * invRange;
+    u = Math.min(1, Math.max(0, u));
+    const idx = Math.min(binsCount - 1, Math.max(0, Math.floor(u * binsCount)));
+
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(X);
+    bins[idx].sum.add(v);
+    bins[idx].n++;
+  }
+
+  const pts = [];
+  for (const b of bins) if (b.n) pts.push(b.sum.multiplyScalar(1 / b.n));
+
+  const out = [];
+  const EPS = 0.01;
+  for (const pp of pts) {
+    if (!out.length || out[out.length - 1].distanceTo(pp) > EPS) out.push(pp.clone());
+  }
+
+  return out.length >= 2 ? out : null;
+}
+
+function extractOrderedCenterlineAutoUV(mesh, root, binsCount = 1500) {
+  const uv = mesh.geometry.attributes.uv;
+  if (!uv) return null;
+
+  const ptsX = extractOrderedCenterlineByGetter(mesh, root, binsCount, (i) => uv.getX(i));
+  const ptsY = extractOrderedCenterlineByGetter(mesh, root, binsCount, (i) => uv.getY(i));
+
+  const lx = scorePolyline(ptsX);
+  const ly = scorePolyline(ptsY);
+
+  return (ly > lx) ? ptsY : ptsX;
+}
+
+function findTrainPathMesh(root) {
+  let best = null;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const n = (o.name || '').toLowerCase();
+    if (!n.includes('trainpath')) return;
+    const v = o.geometry?.attributes?.position?.count ?? 0;
+    if (!best || v > (best.geometry?.attributes?.position?.count ?? 0)) best = o;
+  });
+  return best;
+}
+
+function countMeshes(o) { let meshes = 0; o.traverse(x => { if (x.isMesh) meshes++; }); return meshes; }
+
+function findBestTrainContainer(root) {
+  const candidates = [];
+  root.traverse(o => {
+    const n = (o.name || '').toLowerCase();
+    if (!n) return;
+    if (n === 'train' || n.includes('train')) candidates.push({ o, meshes: countMeshes(o) });
+  });
+  candidates.sort((a, b) => b.meshes - a.meshes);
+  return candidates.length ? candidates[0].o : null;
+}
+
+function detectForwardAxisFromBBox(objLocal) {
+  const box = new THREE.Box3().setFromObject(objLocal);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  let axis = new THREE.Vector3(1, 0, 0);
+  if (size.y > size.x && size.y > size.z) axis.set(0, 1, 0);
+  else if (size.z > size.x && size.z > size.y) axis.set(0, 0, 1);
+  return axis;
+}
+
+function rebuildPrototypeAndHideOriginal() {
+  if (!rootRef || !rawTrainRef) return;
+
+  const baked = rawTrainRef.clone(true);
+
+  const bakedMatrix = new THREE.Matrix4()
+    .copy(rootRef.matrixWorld).invert()
+    .multiply(rawTrainRef.matrixWorld);
+
+  baked.matrixAutoUpdate = false;
+  baked.matrix.copy(bakedMatrix);
+  baked.matrix.decompose(baked.position, baked.quaternion, baked.scale);
+  baked.matrixAutoUpdate = true;
+  baked.updateWorldMatrix(true, true);
+
+  baked.position.set(0, 0, 0);
+  baked.updateWorldMatrix(true, true);
+
+  const forwardAxis = detectForwardAxisFromBBox(baked).normalize();
+  modelFixedQ.setFromUnitVectors(forwardAxis, new THREE.Vector3(0, 0, 1));
+
+  trainMeshPrototype = new THREE.Object3D();
+  trainMeshPrototype.add(baked);
+
+  rawTrainRef.visible = false;
+  rawTrainRef.traverse(o => { o.visible = false; });
+}
+
+function makeTrainInstance() {
+  const rig = new THREE.Object3D();
+  const visual = new THREE.Object3D();
+  rig.add(visual);
+  rig.userData.visual = visual;
+
+  if (trainMeshPrototype) visual.add(trainMeshPrototype.clone(true));
+  return rig;
+}
+
+function normalized01(x) {
+  x = x % 1;
+  return x < 0 ? x + 1 : x;
+}
+
+function sortUs() {
+  return trainData
+    .map((d, idx) => ({ u: normalized01(d.u), idx }))
+    .sort((a, b) => a.u - b.u);
+}
+
+function findLargestGapMidpoint() {
+  if (trainData.length === 0) return 0;
+
+  const arr = sortUs();
+  if (arr.length === 1) return normalized01(arr[0].u + 0.5);
+
+  let bestGap = -1;
+  let bestMid = 0;
+
+  for (let i = 0; i < arr.length; i++) {
+    const a = arr[i].u;
+    const b = (i === arr.length - 1) ? (arr[0].u + 1) : arr[i + 1].u;
+    const gap = b - a;
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestMid = a + gap * 0.5;
+    }
+  }
+  return normalized01(bestMid);
+}
+
+function addOneTrainInLargestGap() {
+  if (!rootRef || !pathCurve || !trainMeshPrototype) return;
+
+  const rig = makeTrainInstance();
+  rootRef.add(rig);
+  trains.push(rig);
+
+  const uNew = findLargestGapMidpoint();
+  trainData.push({ u: uNew });
+}
+
+function ensureTrainCount(targetCount) {
+  while (trains.length < targetCount) addOneTrainInLargestGap();
+
+  while (trains.length > targetCount) {
+    const train = trains.pop();
+    train?.parent?.remove(train);
+    trainData.pop();
+  }
+}
+
+function buildVisiblePath(curve){
+  if (pathMesh && pathMesh.parent){
+    pathMesh.parent.remove(pathMesh);
+    pathMesh.geometry?.dispose?.();
+    pathMesh.material?.dispose?.();
+    pathMesh = null;
+  }
+
+  const radius = 6;
+  const tubularSegments = 600;
+  const radialSegments = 8;
+  const closed = false;
+
+  const geom = new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
+
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff2bd6,
+    transparent: true,
+    opacity: 0.70,
+    depthTest: true,
+    depthWrite: false
+  });
+
+  pathMesh = new THREE.Mesh(geom, mat);
+  pathMesh.position.z -= 10;
+  pathMesh.renderOrder = -10;
+  pathMesh.material.depthTest = true;
+  pathMesh.material.depthWrite = false;
+
+  return pathMesh;
+}
+
+// -----------------------------------------------------
+// LOAD
+// -----------------------------------------------------
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(dracoLoader);
+
+loader.load(MODEL_URL, (gltf) => {
+  rootRef = gltf.scene;
+  scene.add(rootRef);
+
+  controls.target.copy(INIT.target);
+  controls.update();
+
+  rootRef.position.copy(INIT.modelPos);
+  rootRef.updateWorldMatrix(true, true);
+
+  setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
+
+  trainPathMeshRef = findTrainPathMesh(rootRef);
+  if (!trainPathMeshRef) return;
+
+  trainPathMeshRef.visible = false;
+
+  const pts = extractOrderedCenterlineAutoUV(trainPathMeshRef, rootRef, 1500);
+  if (!pts) return;
+
+  pathCurve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  rootRef.add(buildVisiblePath(pathCurve));
+
+  rawTrainRef = findBestTrainContainer(rootRef);
+  if (!rawTrainRef) return;
+
+  rebuildPrototypeAndHideOriginal();
+
+  ensureTrainCount(settings.trainCount);
+  for (let i=0;i<trainData.length;i++) trainData[i].u = i / Math.max(1, trainData.length);
+});
+
+// -----------------------------------------------------
+// ANIMATE
+// -----------------------------------------------------
+const clock = new THREE.Clock();
+
+const worldUp = new THREE.Vector3(0, 1, 0);
+const p = new THREE.Vector3();
+const t0 = new THREE.Vector3();
+const t1 = new THREE.Vector3();
+const fwd = new THREE.Vector3();
+const right = new THREE.Vector3();
+const up2 = new THREE.Vector3();
+const basisM = new THREE.Matrix4();
+const targetQ = new THREE.Quaternion();
+
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (pathCurve && trains.length) {
+    for (let i = 0; i < trains.length; i++) {
+      const rig = trains[i];
+      const visual = rig.userData.visual;
+      const d = trainData[i];
+
+      d.u = (d.u + dt * settings.speedActive) % 1;
+
+      pathCurve.getPointAt(d.u, p);
+      rig.position.copy(p);
+      rig.position.z -= 10;
+
+      pathCurve.getTangentAt(d.u, t0);
+      pathCurve.getTangentAt((d.u + 0.01) % 1, t1);
+      fwd.copy(t0).lerp(t1, 0.6).normalize();
+
+      right.copy(worldUp).cross(fwd);
+      if (right.lengthSq() < 1e-12) right.set(1, 0, 0);
+      right.normalize();
+
+      up2.copy(fwd).cross(right).normalize();
+
+      basisM.makeBasis(right, up2, fwd);
+      targetQ.setFromRotationMatrix(basisM);
+      targetQ.multiply(modelFixedQ);
+
+      visual.quaternion.slerp(targetQ, 0.15);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Resize
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
+  renderGraph();
+  renderTopology();
+});
+
+// initial title
+setGraphTitleFromActive('idle');
+</script>
+</body>
+</html>
