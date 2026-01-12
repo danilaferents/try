@@ -383,10 +383,8 @@
 <body>
 <div id="container"></div>
 
-<!-- Show button when panel hidden -->
 <button id="showControlBtn" type="button" class="">Show control panel</button>
 
-<!-- Control panel: TOP-LEFT -->
 <div id="setupHUD">
   <div class="panel" id="setupPanel">
     <div class="panelHeader">
@@ -425,7 +423,6 @@
         </select>
       </div>
 
-      <!-- NEW: Query selection -->
       <div class="fieldRow">
         <label for="queryMode">Query</label>
         <select id="queryMode">
@@ -456,20 +453,17 @@
   </div>
 </div>
 
-<!-- Topology graph -->
 <div id="topologyHUD" style="display:none;">
   <div class="panel" id="topologyPanel">
     <div class="panelHeader">
       <div class="panelTitle">Topology graph</div>
     </div>
-
     <div id="topologyBox">
       <canvas id="topologyCanvas" style="width:100%; height:100%; border-radius:8px;"></canvas>
     </div>
   </div>
 </div>
 
-<!-- Snapshots HUD -->
 <div id="snapshotsHUD" style="display:none;">
   <div class="panel" id="snapshotsPanel">
     <div class="panelHeader">
@@ -495,7 +489,6 @@
   </div>
 </div>
 
-<!-- Bottom-left Train UI (DEBUG-TOGGLED) -->
 <div id="ui" class="collapsed">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -556,6 +549,11 @@ document.getElementById('container').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = null;
 
+// NEW: overlay group is in WORLD space (not parented to the city model),
+// so "lines" stay perfectly vertical regardless of model transforms.
+const overlayGroup = new THREE.Group();
+scene.add(overlayGroup);
+
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 300000);
 camera.position.set(0, 600, 900);
 
@@ -587,7 +585,7 @@ const totalNodesEl = document.getElementById('totalNodes');
 const mobileNodesEl = document.getElementById('mobileNodes');
 const cameraModeEl  = document.getElementById('cameraMode');
 const reconfigModeEl = document.getElementById('reconfigMode');
-const queryModeEl = document.getElementById('queryMode'); // NEW
+const queryModeEl = document.getElementById('queryMode');
 
 const applyConfigBtn = document.getElementById('applyConfigBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -668,18 +666,14 @@ function clampEven(v, min, max){
 // total nodes: even only
 fillSelectRangeEven(totalNodesEl, 2, 16);
 
-// Default: 4 mobile + 8 fixed => 12 total nodes
-totalNodesEl.value = '12';
+// NEW: Default number of nodes = 8
+totalNodesEl.value = '8';
 
 function rebuildMobileOptionsPreserveSelection(){
   const total = parseInt(totalNodesEl.value, 10);
-
-  // keep your previous cap of 8, but even-only
   const maxMobile = Math.min(total, 8);
-
   const current = parseInt(mobileNodesEl.value || '4', 10);
   fillSelectRangeEven(mobileNodesEl, 2, maxMobile);
-
   const clamped = clampEven(current, 2, maxMobile);
   mobileNodesEl.value = String(clamped);
 }
@@ -693,7 +687,7 @@ reconfigModeEl.value = 'holistic';
 queryModeEl.value = 'stateful';
 
 let activeConfig = {
-  totalNodes: 12,
+  totalNodes: 8,
   mobileNodes: 4,
   topoChangeMs: 1000,
   reconfigMode: 'holistic',
@@ -711,17 +705,13 @@ function setGraphTitleFromActive(extra = ''){
 setGraphTitleFromActive('idle');
 
 totalNodesEl.addEventListener('change', () => {
-  // ensure even selection (defensive, in case of manual DOM edits)
-  const total = clampEven(parseInt(totalNodesEl.value, 10) || 12, 4, 32);
+  const total = clampEven(parseInt(totalNodesEl.value, 10) || 8, 2, 16);
   totalNodesEl.value = String(total);
-
-  // if mobile exceeds total, rebuild will clamp
   rebuildMobileOptionsPreserveSelection();
   updateHudTopInset();
 });
 
 mobileNodesEl.addEventListener('change', () => {
-  // ensure even + within bounds
   const total = parseInt(totalNodesEl.value, 10);
   const maxMobile = Math.min(total, 8);
   const m = clampEven(parseInt(mobileNodesEl.value, 10) || 4, 2, maxMobile);
@@ -741,6 +731,369 @@ function setConfigOpen(open){
 }
 configToggleBtn?.addEventListener('click', () => setConfigOpen(!configOpen));
 setConfigOpen(true);
+
+// -----------------------------------------------------
+// EXPERIMENT STATE
+// -----------------------------------------------------
+let exp = {
+  running: false,
+  startMs: 0,
+  stopMs: 0,
+  tickTimer: null,
+  points: [],
+  maxPoints: 2500,
+  lastTopoEventMs: 0,
+  frozen: false,
+  scrollAfterStop: false,
+  holistic: {
+    phase: 'idle',
+    rampStartMs: 0,
+    rampDurationMs: 10000,
+    baseAtRampStart: 0,
+    jumpTarget: 0,
+  }
+};
+
+function nowMs(){ return performance.now(); }
+
+function resetExperimentGraph(){
+  exp.points = [];
+  exp.frozen = false;
+  exp.lastTopoEventMs = 0;
+  exp.scrollAfterStop = false;
+
+  exp.holistic.phase = 'idle';
+  exp.holistic.rampStartMs = 0;
+  exp.holistic.baseAtRampStart = 0;
+  exp.holistic.jumpTarget = 0;
+}
+
+// -----------------------------------------------------
+// STATE (model / trains)
+// -----------------------------------------------------
+let rootRef = null;
+let pathCurve = null;
+
+let rawTrainRef = null;
+let trainMeshPrototype = null;
+
+const trains = [];
+const trainData = [];
+
+let modelFixedQ = new THREE.Quaternion();
+let pathMesh = null;
+
+// -----------------------------------------------------
+// TRAIN UI (DEBUG.showTrainSettings)
+// -----------------------------------------------------
+const uiEl = document.getElementById('ui');
+function applyTrainUIVisibility() {
+  if (!uiEl) return;
+  uiEl.style.display = DEBUG.showTrainSettings ? 'block' : 'none';
+}
+applyTrainUIVisibility();
+
+const trainCountEl = document.getElementById('trainCount');
+const trainCountVal = document.getElementById('trainCountVal');
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+const toggleUIBtn = document.getElementById('toggleUIBtn');
+
+if (DEBUG.showTrainSettings) {
+  function syncToggleLabel() {
+    toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
+  }
+  syncToggleLabel();
+  toggleUIBtn.addEventListener('click', () => {
+    uiEl.classList.toggle('collapsed');
+    syncToggleLabel();
+  });
+}
+
+const settings = {
+  trainCount: 2,
+  speedUser: speedEl ? parseFloat(speedEl.value) : 0.03,
+  speedActive: 0,
+};
+
+function syncUI() {
+  if (!DEBUG.showTrainSettings) return;
+  if (trainCountVal && trainCountEl) {
+    trainCountVal.textContent = String(settings.trainCount);
+    trainCountEl.value = String(settings.trainCount);
+  }
+  if (speedVal) speedVal.textContent = settings.speedUser.toFixed(3);
+}
+syncUI();
+
+if (speedEl) {
+  speedEl.addEventListener('input', () => {
+    settings.speedUser = parseFloat(speedEl.value);
+    syncUI();
+    if (exp.running) settings.speedActive = settings.speedUser;
+  });
+}
+
+// -----------------------------------------------------
+// EDGE CENTERS + TRAIN->EDGE CONNECTIONS
+// -----------------------------------------------------
+const EDGE = {
+  centers: [],
+
+  // uniform visuals
+  height: 650,
+  radius: 10,
+
+  // distance from path (ground plane) - increase to push farther away
+  lateralOffset: 320,     // <-- was 220 (this is the main "farther from path" knob)
+
+  // optional: push a bit forward/back along the path direction (ground plane)
+  alongOffset: 90,        // <-- keeps them away from the track area
+
+  // where the arrow ends on the node:
+  // 0.0 = road surface (anchor), 1.0 = column center, in-between = in-between
+  arrowTargetMix: 0.75,   // <-- "half of the center and the road" (tweak 0.35..0.75)
+  arrowEndLift: 120, // absolute world-space lift (THIS fixes occlusion)
+  // how much the arrow stops before the cylinder surface
+  arrowStopGap: 70,       // <-- increase = stops earlier; decrease = gets closer
+};
+
+
+const trainConnections = []; // per train: { arrowGroup, shaft, head }
+
+function makeOrangeArrow() {
+  const g = new THREE.Group();
+
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff8a00, transparent: true, opacity: 1.0 });
+
+  // shaft thicker
+  const shaftGeom = new THREE.CylinderGeometry(4.6, 4.6, 1, 10, 1, false);
+  const shaft = new THREE.Mesh(shaftGeom, mat);
+  shaft.position.y = 0.5;
+  g.add(shaft);
+
+  // head bigger + more visible
+  const headGeom = new THREE.ConeGeometry(16, 44, 14, 1, false);
+  const head = new THREE.Mesh(headGeom, mat);
+  head.position.y = 1;
+  g.add(head);
+
+  g.visible = false;
+  g.renderOrder = 25;
+
+  return { group: g, shaft, head, headLen: 44 };
+}
+
+function setMapOverlayVisible(visible){
+  EDGE.centers.forEach(m => { if (m) m.visible = !!visible; });
+  trainConnections.forEach(c => { if (c?.arrowGroup) c.arrowGroup.visible = !!visible; });
+}
+
+const _tmpA = new THREE.Vector3();
+const _tmpB = new THREE.Vector3();
+const _tmpDir = new THREE.Vector3();
+const _tmpQuat = new THREE.Quaternion();
+const _tmpMat4 = new THREE.Matrix4();
+const columnRaycaster = new THREE.Raycaster();
+const MAP_UP_LOCAL = new THREE.Vector3(0, 0, 1); // Berlin map "up" in model space
+const _tmpWorldUp = new THREE.Vector3();
+const _tmpW = new THREE.Vector3();
+const _tmpLocal = new THREE.Vector3();
+const _tmpQ = new THREE.Quaternion();
+
+function clearEdgeCenters(){
+  for (const m of EDGE.centers){
+    if (m.parent) m.parent.remove(m);
+    m.geometry?.dispose?.();
+    m.material?.dispose?.();
+  }
+  EDGE.centers.length = 0;
+}
+
+function clearTrainArrows(){
+  for (const c of trainConnections){
+    if (c?.arrowGroup?.parent) c.arrowGroup.parent.remove(c.arrowGroup);
+    c?.shaft?.geometry?.dispose?.();
+    c?.head?.geometry?.dispose?.();
+    c?.shaft?.material?.dispose?.();
+    // head shares same material instance; dispose once is fine in this simple setup
+  }
+  trainConnections.length = 0;
+}
+
+function buildEdgeCenters(count){
+  if (!rootRef || !pathCurve) return;
+
+  clearEdgeCenters();
+
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x1f5cff,
+    emissive: 0x1336aa,
+    emissiveIntensity: 0.55,
+    metalness: 0.15,
+    roughness: 0.35,
+    transparent: true,
+    opacity: 0.95,
+  });
+
+  const geom = new THREE.CylinderGeometry(
+    EDGE.radius,
+    EDGE.radius,
+    EDGE.height,
+    10,
+    1,
+    false
+  );
+
+  // Cylinder axis = local Z (map-up)
+  geom.rotateX(Math.PI / 2);
+
+  const tan = new THREE.Vector3();
+  const right = new THREE.Vector3();
+
+  // world-space "up" for raycasting = local MAP_UP transformed by rootRef
+  rootRef.getWorldQuaternion(_tmpQ);
+  _tmpWorldUp.copy(MAP_UP_LOCAL).applyQuaternion(_tmpQ).normalize();
+
+  for (let i = 0; i < count; i++){
+    const u = (i + 0.5) / count;
+
+    // model-local point on the path
+    pathCurve.getPointAt(u, _tmpA);
+
+    // tangent in model-local space
+    pathCurve.getTangentAt(u, tan).normalize();
+
+    // right direction in model-local ground plane
+    right.copy(MAP_UP_LOCAL).cross(tan);
+    if (right.lengthSq() < 1e-10) right.set(1, 0, 0);
+    right.normalize();
+
+    const side = (i % 2 === 0) ? 1 : -1;
+
+    // move farther away from path (ground plane)
+    _tmpA.addScaledVector(right, EDGE.lateralOffset * side);
+
+    // optional: move a bit along path (ground plane) so they don't sit too close to track
+    _tmpA.addScaledVector(tan, EDGE.alongOffset * side);
+
+    // --- Raycast to snap to map surface (consistent anchoring) ---
+    _tmpW.copy(_tmpA);
+    rootRef.localToWorld(_tmpW);                 // world position of desired node spot
+
+    const rayOrigin = _tmpW.clone().addScaledVector(_tmpWorldUp, 2500); // above map
+    const rayDir = _tmpWorldUp.clone().multiplyScalar(-1);
+
+    columnRaycaster.set(rayOrigin, rayDir);
+    const hits = columnRaycaster.intersectObject(rootRef, true);
+
+    let anchorWorld = _tmpW.clone();
+    if (hits.length) anchorWorld.copy(hits[0].point);
+
+    // place cylinder in model space at anchor (so it goes through map evenly)
+    _tmpLocal.copy(anchorWorld);
+    rootRef.worldToLocal(_tmpLocal);
+
+    const m = new THREE.Mesh(geom, baseMat.clone());
+    m.position.copy(_tmpLocal);
+    m.renderOrder = 5;
+    m.visible = false;
+
+    // store anchor in WORLD for arrow targeting
+    m.userData.anchorWorld = anchorWorld.clone();
+
+    EDGE.centers.push(m);
+    rootRef.add(m); // ✅ important: nodes live in model space
+  }
+}
+
+function initTrainConnections(){
+  clearTrainArrows();
+  if (!rootRef || EDGE.centers.length <= 0) return;
+
+  for (let i = 0; i < trains.length; i++){
+    const { group, shaft, head, headLen } = makeOrangeArrow();
+    overlayGroup.add(group);
+    trainConnections.push({ arrowGroup: group, shaft, head, headLen });
+  }
+}
+
+function updateConnections(){
+  if (!EDGE.centers.length || !trainConnections.length) return;
+
+  for (let i = 0; i < trains.length; i++){
+    const c = trainConnections[i];
+    const train = trains[i];
+    if (!c || !train) continue;
+
+    // train world start
+    train.getWorldPosition(_tmpA);
+    _tmpA.z += 30;
+
+    // find nearest node using anchorWorld (stable near the ground)
+    let bestIdx = 0;
+    let bestD2 = Infinity;
+
+    for (let j = 0; j < EDGE.centers.length; j++){
+      const e = EDGE.centers[j];
+      if (!e) continue;
+
+      const aw = e.userData.anchorWorld;
+      if (!aw) continue;
+
+      const d2 = _tmpA.distanceToSquared(aw);
+      if (d2 < bestD2) { bestD2 = d2; bestIdx = j; }
+    }
+
+    const edge = EDGE.centers[bestIdx];
+    if (!edge) continue;
+
+    const anchorWorld = edge.userData.anchorWorld;
+    if (!anchorWorld) continue;
+
+    // center of cylinder in WORLD
+    edge.getWorldPosition(_tmpB); // _tmpB = centerWorld
+
+    // target between road(anchor) and center
+    const mix = EDGE.arrowTargetMix; // 0..1
+    _tmpB.lerpVectors(anchorWorld, _tmpB, mix); // _tmpB becomes targetWorld
+    _tmpB.addScaledVector(_tmpWorldUp, EDGE.arrowEndLift);
+
+    // direction to target
+    _tmpDir.copy(_tmpB).sub(_tmpA);
+    const fullLen = _tmpDir.length();
+    if (fullLen < 1e-6) continue;
+    _tmpDir.multiplyScalar(1 / fullLen);
+
+    // rotate arrow so +Y points to target
+    _tmpQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _tmpDir);
+
+    const arrow = c.arrowGroup;
+    arrow.position.copy(_tmpA);
+    arrow.quaternion.copy(_tmpQuat);
+
+    // stop before cylinder surface
+    const stopGap = EDGE.arrowStopGap;     // <-- tweak this
+    const headLen = c.headLen ?? 44;
+
+    const usable = Math.max(40, fullLen - stopGap);
+    const shaftLen = Math.max(1, usable - headLen);
+
+    c.shaft.scale.set(1, shaftLen, 1);
+    c.shaft.position.y = shaftLen * 0.5;
+
+    c.head.position.y = shaftLen + headLen * 0.5;
+
+    // cap absurd lengths
+    const maxLen = 2600;
+    if (usable > maxLen) {
+      const k = maxLen / usable;
+      c.shaft.scale.y *= k;
+      c.shaft.position.y *= k;
+      c.head.position.y *= k;
+    }
+  }
+}
 
 // -----------------------------------------------------
 // SCENARIOS
@@ -785,6 +1138,9 @@ function applyScenarioLayout(){
   if (shotsOn) renderGraph();
   if (topoOn) renderTopology();
 
+  // toggle overlay visibility with map
+  setMapOverlayVisible(mapOn);
+
   updateHudTopInset();
 }
 
@@ -794,42 +1150,6 @@ scenarioShotsBtn?.addEventListener('click', () => { scenario.shots = !scenario.s
 
 scenario.map = true;
 applyScenarioLayout();
-
-// -----------------------------------------------------
-// EXPERIMENT STATE
-// -----------------------------------------------------
-let exp = {
-  running: false,
-  startMs: 0,
-  stopMs: 0,
-  tickTimer: null,
-  points: [],
-  maxPoints: 2500,
-  lastTopoEventMs: 0,
-  frozen: false,
-  scrollAfterStop: false,
-  holistic: {
-    phase: 'idle',
-    rampStartMs: 0,
-    rampDurationMs: 10000,
-    baseAtRampStart: 0,
-    jumpTarget: 0,
-  }
-};
-
-function nowMs(){ return performance.now(); }
-
-function resetExperimentGraph(){
-  exp.points = [];
-  exp.frozen = false;
-  exp.lastTopoEventMs = 0;
-  exp.scrollAfterStop = false;
-
-  exp.holistic.phase = 'idle';
-  exp.holistic.rampStartMs = 0;
-  exp.holistic.baseAtRampStart = 0;
-  exp.holistic.jumpTarget = 0;
-}
 
 // -----------------------------------------------------
 // GRAPH (latency)
@@ -1039,7 +1359,6 @@ function resizeTopoCanvasToCSS() {
   if (tctx) tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-/* keep drawing from overscaling inside big panels */
 function autoFit(ctx, w, h, drawFn) {
   const pad = 18;
   const DW = 420;
@@ -1273,9 +1592,11 @@ function genBaseline(){
   return clampY(base + jitter + tinySpike);
 }
 
+// -----------------------------------------------------
+// EXPERIMENT START/STOP
+// -----------------------------------------------------
 function startExperiment(){
-  // enforce even values (defensive)
-  const total = clampEven(parseInt(totalNodesEl.value, 10) || 12, 4, 32);
+  const total = clampEven(parseInt(totalNodesEl.value, 10) || 8, 2, 16);
   totalNodesEl.value = String(total);
 
   const maxMobile = Math.min(total, 8);
@@ -1294,6 +1615,12 @@ function startExperiment(){
   settings.trainCount = activeConfig.mobileNodes;
   syncUI();
   ensureTrainCount(settings.trainCount);
+
+  // NEW: edge centers reflect TOTAL nodes (so 8 nodes => 8 columns)
+  const edgeCount = Math.max(2, activeConfig.totalNodes);
+  buildEdgeCenters(edgeCount);
+  initTrainConnections();
+  setMapOverlayVisible(scenario.map);
 
   settings.speedActive = settings.speedUser;
 
@@ -1345,8 +1672,6 @@ function startExperiment(){
           exp.holistic.phase = 'frozen';
           exp.frozen = true;
         }
-      } else {
-        // frozen
       }
     }
 
@@ -1372,14 +1697,12 @@ function stopExperiment(){
   exp.tickTimer = null;
 
   exp.scrollAfterStop = false;
-
   settings.speedActive = 0;
 
   setGraphTitleFromActive(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
   if (scenario.shots) renderGraph();
 
   stopBtn.disabled = true;
-
   addSnapshot();
 }
 
@@ -1401,21 +1724,6 @@ function setOrbitView(target, distance, yawDeg, elevationDeg) {
   controls.target.copy(target);
   controls.update();
 }
-
-// -----------------------------------------------------
-// STATE (model / trains)
-// -----------------------------------------------------
-let rootRef = null;
-let pathCurve = null;
-
-let rawTrainRef = null;
-let trainMeshPrototype = null;
-
-const trains = [];
-const trainData = [];
-
-let modelFixedQ = new THREE.Quaternion();
-let pathMesh = null;
 
 // -----------------------------------------------------
 // RESET (view + graph + trains to start)
@@ -1448,59 +1756,6 @@ resetViewBtn?.addEventListener('click', () => {
   setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
   resetRunAndTrainsToStart();
 });
-
-// -----------------------------------------------------
-// TRAIN UI (DEBUG.showTrainSettings)
-// -----------------------------------------------------
-const uiEl = document.getElementById('ui');
-
-function applyTrainUIVisibility() {
-  if (!uiEl) return;
-  uiEl.style.display = DEBUG.showTrainSettings ? 'block' : 'none';
-}
-applyTrainUIVisibility();
-
-const trainCountEl = document.getElementById('trainCount');
-const trainCountVal = document.getElementById('trainCountVal');
-const speedEl = document.getElementById('speed');
-const speedVal = document.getElementById('speedVal');
-const toggleUIBtn = document.getElementById('toggleUIBtn');
-
-if (DEBUG.showTrainSettings) {
-  function syncToggleLabel() {
-    toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
-  }
-  syncToggleLabel();
-
-  toggleUIBtn.addEventListener('click', () => {
-    uiEl.classList.toggle('collapsed');
-    syncToggleLabel();
-  });
-}
-
-const settings = {
-  trainCount: 2,
-  speedUser: speedEl ? parseFloat(speedEl.value) : 0.03,
-  speedActive: 0,
-};
-
-function syncUI() {
-  if (!DEBUG.showTrainSettings) return;
-  if (trainCountVal && trainCountEl) {
-    trainCountVal.textContent = String(settings.trainCount);
-    trainCountEl.value = String(settings.trainCount);
-  }
-  if (speedVal) speedVal.textContent = settings.speedUser.toFixed(3);
-}
-syncUI();
-
-if (speedEl) {
-  speedEl.addEventListener('input', () => {
-    settings.speedUser = parseFloat(speedEl.value);
-    syncUI();
-    if (exp.running) settings.speedActive = settings.speedUser;
-  });
-}
 
 // -----------------------------------------------------
 // TRAIN COUNT / PATH / MODEL HELPERS
@@ -1768,6 +2023,13 @@ loader.load(MODEL_URL, (gltf) => {
 
   ensureTrainCount(settings.trainCount);
   for (let i=0;i<trainData.length;i++) trainData[i].u = i / Math.max(1, trainData.length);
+
+  // NEW: default centers reflect default total nodes (=8)
+  const edgeCount = Math.max(2, activeConfig.totalNodes);
+  buildEdgeCenters(edgeCount);
+  initTrainConnections();
+
+  setMapOverlayVisible(scenario.map);
 });
 
 // -----------------------------------------------------
@@ -1817,6 +2079,9 @@ function animate() {
       visual.quaternion.slerp(targetQ, 0.15);
     }
   }
+
+  // NEW: always connect to nearest node; arrows are thick & black
+  updateConnections();
 
   controls.update();
   renderer.render(scene, camera);
