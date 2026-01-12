@@ -326,7 +326,7 @@
   </div>
 </div>
 
-<!-- Bottom-left UI (hideable) -->
+<!-- Bottom-left Train UI (NOW DEBUG-TOGGLED) -->
 <div id="ui" class="collapsed">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -355,6 +355,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+/**
+ * DEBUG TOGGLES
+ * - Set showTrainSettings=true to show the Train settings panel.
+ */
+const DEBUG = {
+  showTrainSettings: false, // <-- toggle this
+};
 
 const MODEL_URL = 'models/gltf/Berlin.glb';
 const MAX_PIXEL_RATIO = 1.5;
@@ -612,7 +620,7 @@ function drawGraph(points) {
     return x0 + tt * (x1 - x0);
   };
 
-  // --- DYNAMIC X TICKS (1,2,3,4,5,6,7,8,... continuing) ---
+  // --- DYNAMIC X TICKS ---
   ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.textAlign = 'center';
@@ -636,7 +644,6 @@ function drawGraph(points) {
   for (; tTick <= tMaxAxis + 1e-6; tTick += step) {
     const x = xAtT(tTick);
 
-    // vertical grid
     ctx.strokeStyle = 'rgba(0,0,0,0.10)';
     ctx.setLineDash([2, 6]);
     ctx.beginPath();
@@ -645,14 +652,12 @@ function drawGraph(points) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // tick mark
     ctx.strokeStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
     ctx.moveTo(x, y1);
     ctx.lineTo(x, y1 + 5);
     ctx.stroke();
 
-    // label as seconds (integer-ish when possible)
     const isIntish = Math.abs(step - Math.round(step)) < 1e-6;
     const label = isIntish ? String(Math.round(tTick)) : (step < 1 ? tTick.toFixed(1) : tTick.toFixed(0));
     ctx.fillText(label, x, y1 + 8);
@@ -684,7 +689,6 @@ function drawGraph(points) {
     ctx.closePath();
     ctx.fill();
 
-    // datapoint dots (subsample)
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     const dotStep = Math.max(1, Math.floor(points.length / 120));
     for (let i = 0; i < points.length; i += dotStep) {
@@ -883,17 +887,15 @@ renderTopology();
 window.addEventListener('resize', renderTopology);
 
 // -----------------------------------------------------
-// SNAPSHOTS (FIXED: add snapshots without switching tabs)
+// SNAPSHOTS
 // -----------------------------------------------------
 const snapshots = []; // { title, runtimeSec, dataUrl, when }
 
 function addSnapshot(){
-  // Ensure the canvas is fully rendered before capture
   renderGraph();
 
   const c = activeConfig;
   const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
-
   const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
 
   const dataUrl = graphCanvas.toDataURL('image/png');
@@ -949,44 +951,61 @@ function renderSnapshotsList(){
 renderSnapshotsList();
 
 // -----------------------------------------------------
-// BOTTOM-LEFT UI (speed user vs active)
+// TRAIN UI (NOW CODE-TOGGLED VIA DEBUG.showTrainSettings)
 // -----------------------------------------------------
+const uiEl = document.getElementById('ui');
+
+// Always hide/show panel based on DEBUG flag (no user-facing control needed)
+function applyTrainUIVisibility() {
+  if (!uiEl) return;
+  uiEl.style.display = DEBUG.showTrainSettings ? 'block' : 'none';
+}
+applyTrainUIVisibility();
+
+// If hidden, we still keep speed/train defaults in code
 const trainCountEl = document.getElementById('trainCount');
 const trainCountVal = document.getElementById('trainCountVal');
 const speedEl = document.getElementById('speed');
 const speedVal = document.getElementById('speedVal');
-
-const uiEl = document.getElementById('ui');
 const toggleUIBtn = document.getElementById('toggleUIBtn');
 
-function syncToggleLabel() {
-  toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
-}
-syncToggleLabel();
-
-toggleUIBtn.addEventListener('click', () => {
-  uiEl.classList.toggle('collapsed');
+// If the UI is visible, allow collapsing; if not, no need for toggle
+if (DEBUG.showTrainSettings) {
+  function syncToggleLabel() {
+    toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
+  }
   syncToggleLabel();
-});
 
+  toggleUIBtn.addEventListener('click', () => {
+    uiEl.classList.toggle('collapsed');
+    syncToggleLabel();
+  });
+}
+
+// Settings always exist (even if UI hidden)
 const settings = {
   trainCount: 2,
-  speedUser: parseFloat(speedEl.value),
+  speedUser: speedEl ? parseFloat(speedEl.value) : 0.03,
   speedActive: 0, // trains do NOT move at load
 };
 
 function syncUI() {
-  trainCountVal.textContent = String(settings.trainCount);
-  trainCountEl.value = String(settings.trainCount);
-  speedVal.textContent = settings.speedUser.toFixed(3);
+  if (!DEBUG.showTrainSettings) return;
+  if (trainCountVal && trainCountEl) {
+    trainCountVal.textContent = String(settings.trainCount);
+    trainCountEl.value = String(settings.trainCount);
+  }
+  if (speedVal) speedVal.textContent = settings.speedUser.toFixed(3);
 }
 syncUI();
 
-speedEl.addEventListener('input', () => {
-  settings.speedUser = parseFloat(speedEl.value);
-  syncUI();
-  if (exp.running) settings.speedActive = settings.speedUser;
-});
+if (speedEl) {
+  speedEl.addEventListener('input', () => {
+    settings.speedUser = parseFloat(speedEl.value);
+    syncUI();
+    if (exp.running) settings.speedActive = settings.speedUser;
+  });
+}
 
 // -----------------------------------------------------
 // TABS
@@ -997,7 +1016,6 @@ function setTab(mode){
   tabVizEl?.classList.toggle('active', isViz);
   tabSnapshotsEl?.classList.toggle('active', !isViz);
 
-  // IMPORTANT: use explicit display values (not '')
   if (setupBodyEl) setupBodyEl.style.display = isViz ? 'block' : 'none';
   if (snapshotsBodyEl) snapshotsBodyEl.style.display = isViz ? 'none' : 'block';
 
@@ -1036,7 +1054,7 @@ function startExperiment(){
     reconfigMode: reconfigModeEl.value
   };
 
-  // trains match mobile nodes
+  // trains match mobile nodes (regardless of whether UI is visible)
   settings.trainCount = activeConfig.mobileNodes;
   syncUI();
   ensureTrainCount(settings.trainCount);
@@ -1044,7 +1062,6 @@ function startExperiment(){
   // start moving now
   settings.speedActive = settings.speedUser;
 
-  // reset graph
   resetExperimentGraph();
   exp.running = true;
   exp.startMs = nowMs();
@@ -1081,7 +1098,7 @@ function startExperiment(){
       } else if (exp.holistic.phase === 'ramping') {
         const u = (tMs - exp.holistic.rampStartMs) / exp.holistic.rampDurationMs;
         const uu = Math.min(1, Math.max(0, u));
-        const eased = uu * uu * (3 - 2 * uu); // smoothstep
+        const eased = uu * uu * (3 - 2 * uu);
 
         const v = exp.holistic.baseAtRampStart +
           eased * (exp.holistic.jumpTarget - exp.holistic.baseAtRampStart) +
@@ -1111,7 +1128,7 @@ function startExperiment(){
     if (exp.points.length > exp.maxPoints) exp.points.splice(0, exp.points.length - exp.maxPoints);
 
     renderGraph();
-  }, 10); // dense
+  }, 10);
 }
 
 function stopExperiment(){
@@ -1123,23 +1140,17 @@ function stopExperiment(){
   clearInterval(exp.tickTimer);
   exp.tickTimer = null;
 
-  // FIX: do NOT auto-switch tabs; just add the snapshot.
-  // Also: freeze x-axis after stop (no more scrolling)
   exp.scrollAfterStop = false;
 
   // stop trains but keep user slider value
   settings.speedActive = 0;
 
-  // render once so the snapshot captures final frame + title
   setGraphTitleFromActive(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
   renderGraph();
 
   stopBtn.disabled = true;
 
-  // snapshot always added
   addSnapshot();
-
-  // update list even if user stays on Visualization
   renderSnapshotsList();
 }
 
@@ -1183,7 +1194,6 @@ let pathMesh = null;
 // RESET (view + graph + trains to start)
 // -----------------------------------------------------
 function resetRunAndTrainsToStart(){
-  // stop experiment
   exp.running = false;
   exp.frozen = false;
   exp.scrollAfterStop = false;
@@ -1191,19 +1201,15 @@ function resetRunAndTrainsToStart(){
   clearInterval(exp.tickTimer);
   exp.tickTimer = null;
 
-  // clear graph
   exp.points = [];
   exp.lastTopoEventMs = 0;
   exp.startMs = 0;
   exp.stopMs = 0;
 
-  // stop trains
   settings.speedActive = 0;
 
-  // reset train positions to beginning
   for (let i = 0; i < trainData.length; i++) trainData[i].u = 0;
 
-  // snap train transforms immediately (so user sees it without waiting)
   if (pathCurve && trains.length) {
     const worldUp = new THREE.Vector3(0, 1, 0);
     const p = new THREE.Vector3();
@@ -1242,7 +1248,6 @@ function resetRunAndTrainsToStart(){
     }
   }
 
-  // UI
   stopBtn.disabled = true;
   applyConfigBtn.textContent = 'Apply (Start)';
   setGraphTitleFromActive('idle');
@@ -1251,13 +1256,8 @@ function resetRunAndTrainsToStart(){
 }
 
 resetViewBtn?.addEventListener('click', () => {
-  // reset camera
   setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
-
-  // clean graph + reset trains to start
   resetRunAndTrainsToStart();
-
-  // keep user in viz view
   setTab('viz');
 });
 
@@ -1509,7 +1509,7 @@ loader.load(MODEL_URL, (gltf) => {
 
   setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
 
-  trainPathMeshRef = findTrainPathMesh(rootRef);
+  const trainPathMeshRef = findTrainPathMesh(rootRef);
   if (!trainPathMeshRef) return;
 
   trainPathMeshRef.visible = false;
