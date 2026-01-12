@@ -43,32 +43,6 @@
       z-index: 2;
     }
 
-    #ui {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.92);
-      border-radius: 8px;
-      font-size: 12px;
-      z-index: 10;
-      line-height: 1.35;
-      min-width: 320px;
-    }
-
-    .row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
-    .label { display: inline-block; width: 92px; }
-    .val { display: inline-block; width: 60px; text-align: right; }
-    input[type="range"] { width: 180px; }
-    button {
-      font-size: 12px; padding: 6px 8px; border-radius: 6px;
-      border: 1px solid rgba(0,0,0,0.15); background: white; cursor: pointer;
-    }
-    button:hover { background: rgba(255,255,255,0.92); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .hr { height: 1px; background: rgba(0,0,0,0.12); margin: 10px 0; }
-    .small { font-size: 11px; opacity: 0.8; }
-
     /* HUD panels */
     #setupHUD {
       position: absolute;
@@ -78,24 +52,19 @@
       pointer-events: none;
     }
 
-    #setupWrap{
-      display:flex;
-      align-items:flex-start;
-      gap:10px;
-    }
-
-    #graphHUD {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    /* Topology HUD (BOTTOM-RIGHT) */
+    /* Topology HUD (default bottom-right) */
     #topologyHUD{
       position:absolute;
       right:10px;
+      bottom:10px;
+      z-index:10;
+      pointer-events:none;
+    }
+
+    /* Snapshots HUD: LEFT, grows UP and RIGHT */
+    #snapshotsHUD{
+      position:absolute;
+      left:10px;
       bottom:10px;
       z-index:10;
       pointer-events:none;
@@ -119,15 +88,9 @@
       margin-bottom: 8px;
     }
 
-    .panelTitle { font-weight: 700; font-size: 12px; }
-
-    #graphBox {
-      height: 250px;
-      border-radius: 8px;
-      border: 1px dashed rgba(0,0,0,0.25);
-      background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
-      overflow: hidden;
-    }
+    .panelTitle { font-weight: 800; font-size: 12px; letter-spacing: 0.2px; }
+    .hr { height: 1px; background: rgba(0,0,0,0.12); margin: 10px 0; }
+    .small { font-size: 11px; opacity: 0.8; }
 
     /* Topology box */
     #topologyBox{
@@ -141,6 +104,26 @@
       width: 340px;
     }
 
+    /* snapshots panel sizing (left, expands upward; allow it to get big) */
+    #snapshotsPanel{
+      width: 520px;
+    }
+    #snapshotsBox{
+      max-height: calc(100vh - 380px);
+      overflow:auto;
+      padding-right: 6px;
+    }
+
+    /* Graph box (now inside Snapshots panel at bottom) */
+    #graphBox {
+      height: 250px;
+      border-radius: 8px;
+      border: 1px dashed rgba(0,0,0,0.25);
+      background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+      overflow: hidden;
+    }
+
+    /* Form rows */
     .fieldRow {
       display: flex;
       align-items: center;
@@ -158,43 +141,88 @@
       min-width: 150px;
     }
 
-    /* Tabs */
+    button {
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,0.15);
+      background: white;
+      cursor: pointer;
+    }
+    button:hover { background: rgba(255,255,255,0.92); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Scenario buttons: keep blue dot + shadows, no blue fill highlight */
     .tabsCol{
       pointer-events:auto;
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:8px;
       margin-top: 2px;
     }
-    .tabBtn{
+    .scenarioBtn{
       font-size:12px;
-      padding:8px 12px;
-      border-radius:999px;
+      padding:10px 12px;
+      border-radius:12px;
       border:1px solid rgba(0,0,0,0.18);
-      background: rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.55);
       cursor:pointer;
-      text-align:left;
-      min-width: 132px;
-      font-weight: 700;
+      text-align:center;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease;
     }
-    .tabBtn.active{
-      background: white;
+    .scenarioBtn:hover{ transform: translateY(-1px); }
+    .scenarioBtn.active{
+      background: rgba(255,255,255,0.78);
       border-color: rgba(0,0,0,0.28);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+      box-shadow:
+        0 12px 26px rgba(0,0,0,0.12),
+        inset 0 0 0 2px rgba(255,255,255,0.55);
+    }
+    .scenarioBtn .dot{
+      display:inline-block;
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      margin-right:8px;
+      vertical-align:middle;
+      background: rgba(0,0,0,0.18);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+    }
+    .scenarioBtn.active .dot{
+      background: rgba(36,60,255,0.85);
     }
 
-    /* Collapsible bottom-left UI */
-    #ui .uiBody { margin-top: 8px; }
-    #ui.collapsed .uiBody { display: none; }
-
-    /* Snapshots list */
-    #snapshotsBody{
+    /* Control panel hide/show */
+    #setupHUD.hidden { display:none; }
+    #showControlBtn{
+      position:absolute;
+      top:10px;
+      left:10px;
+      z-index: 11;
+      pointer-events:auto;
       display:none;
-      margin-top: 8px;
-      max-height: 420px;
-      overflow:auto;
-      padding-right: 6px;
     }
+    #showControlBtn.visible{ display:block; }
+
+    /* Config collapse button style */
+    .pillBtn{
+      width:100%;
+      text-align:center;
+      font-weight: 900;
+      border-radius: 999px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.75);
+    }
+    .pillBtn.active{
+      background: white;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.10);
+      border-color: rgba(0,0,0,0.28);
+    }
+
+    /* Snapshots cards */
     .shot{
       border:1px solid rgba(0,0,0,0.10);
       border-radius:10px;
@@ -203,7 +231,7 @@
       margin-top:10px;
     }
     .shotTitle{
-      font-weight:700;
+      font-weight:800;
       font-size:12px;
       margin-bottom:6px;
       line-height:1.2;
@@ -218,6 +246,102 @@
       border-radius:8px;
       border:1px dashed rgba(0,0,0,0.20);
       display:block;
+    }
+
+    /* Bottom-left Train UI (unchanged) */
+    #ui {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.92);
+      border-radius: 8px;
+      font-size: 12px;
+      z-index: 10;
+      line-height: 1.35;
+      min-width: 320px;
+    }
+    #ui .uiBody { margin-top: 8px; }
+    #ui.collapsed .uiBody { display: none; }
+    .row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+    .label { display: inline-block; width: 92px; }
+    .val { display: inline-block; width: 60px; text-align: right; }
+    input[type="range"] { width: 180px; }
+
+    /* ---------------------------------------------------
+       SPLIT LAYOUT (when map is OFF)
+       - topology takes right half (big)
+       - snapshots takes left half (big)
+       - if only one is enabled, it takes full width
+    --------------------------------------------------- */
+    body.splitMode #topologyHUD,
+    body.splitMode #snapshotsHUD{
+      position: fixed;
+      top: 10px;
+      bottom: 10px;
+      z-index: 9; /* below setupHUD so control panel stays clickable */
+    }
+
+    body.splitMode #snapshotsHUD{
+      left: 10px;
+      right: auto;
+      width: calc(50vw - 15px);
+    }
+
+    body.splitMode #topologyHUD{
+      right: 10px;
+      left: auto;
+      width: calc(50vw - 15px);
+      bottom: 10px;
+    }
+
+    body.splitMode #snapshotsPanel,
+    body.splitMode #topologyPanel{
+      width: 100%;
+      height: calc(100vh - 20px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    body.splitMode #topologyBox{
+      height: auto;
+      flex: 1;
+    }
+
+    body.splitMode #snapshotsBox{
+      max-height: none;
+      flex: 1;
+      overflow: auto;
+    }
+
+    body.splitMode #graphBox{
+      height: 320px;
+    }
+
+    body.splitMode.soloTopo #topologyHUD{
+      left: 10px;
+      width: calc(100vw - 20px);
+    }
+    body.splitMode.soloTopo #snapshotsHUD{ display:none !important; }
+
+    body.splitMode.soloShots #snapshotsHUD{
+      right: 10px;
+      width: calc(100vw - 20px);
+    }
+    body.splitMode.soloShots #topologyHUD{ display:none !important; }
+
+    /* ---------------------------------------------------
+       NO OVERLAP (map ON + topo+shots ON)
+       Force topology to TOP-RIGHT so it never collides with bottom-left snapshots
+    --------------------------------------------------- */
+    body.noOverlapHUD #topologyHUD{
+      top: 10px;
+      bottom: auto;
+      right: 10px;
+    }
+    body.noOverlapHUD #snapshotsHUD{
+      left: 10px;
+      bottom: 10px;
     }
   </style>
 
@@ -234,87 +358,76 @@
 <body>
 <div id="container"></div>
 
-<!-- Setup: TOP-LEFT -->
+<!-- Show button when panel hidden -->
+<button id="showControlBtn" type="button" class="">Show control panel</button>
+
+<!-- Control panel: TOP-LEFT -->
 <div id="setupHUD">
-  <div id="setupWrap">
-    <div class="panel" id="setupPanel">
-      <div class="panelHeader">
-        <div class="panelTitle">Setup</div>
-      </div>
-
-      <!-- Visualization setup -->
-      <div id="setupBody">
-        <div class="fieldRow">
-          <label for="totalNodes">Number of nodes</label>
-          <select id="totalNodes"></select>
-        </div>
-
-        <div class="fieldRow">
-          <label for="mobileNodes">Number of mobile nodes</label>
-          <select id="mobileNodes"></select>
-        </div>
-
-        <div class="fieldRow">
-          <label for="cameraMode">Rate of topology changes</label>
-          <select id="cameraMode">
-            <option value="500">500ms</option>
-            <option value="1000" selected>1s</option>
-            <option value="2000">2s</option>
-            <option value="4000">4s</option>
-          </select>
-        </div>
-
-        <div class="fieldRow">
-          <label for="reconfigMode">Reconfiguration</label>
-          <select id="reconfigMode">
-            <option value="holistic" selected>Holistic</option>
-            <option value="incremental">Incremental</option>
-          </select>
-        </div>
-
-        <div class="fieldRow">
-          <button id="applyConfigBtn" type="button">Apply (Start)</button>
-          <button id="stopBtn" type="button" disabled>Stop</button>
-          <button id="resetViewBtn" type="button">Reset view</button>
-        </div>
-
-        <div class="small" id="pendingHint" style="margin-top:6px; opacity:0.7;">
-          Changes apply only when you click <b>Apply</b>.
-        </div>
-      </div>
-
-      <!-- Snapshots view -->
-      <div id="snapshotsBody">
-        <div class="small" style="opacity:0.8;">
-          Saved runs appear here after you press <b>Stop</b>.
-        </div>
-        <div id="snapshotsList"></div>
-      </div>
-    </div>
-
-    <!-- Tabs -->
-    <div class="tabsCol" role="tablist" aria-label="Mode">
-      <button id="tabViz" class="tabBtn active" type="button">Visualization</button>
-      <button id="tabSnapshots" class="tabBtn" type="button">Snapshots</button>
-    </div>
-  </div>
-</div>
-
-<!-- Graph: TOP-RIGHT -->
-<div id="graphHUD">
-  <div class="panel" id="graphPanel">
+  <div class="panel" id="setupPanel">
     <div class="panelHeader">
-      <div class="panelTitle" id="graphTitle">—</div>
+      <div class="panelTitle">Control panel</div>
+      <button id="hideControlBtn" type="button" title="Hide panel">Hide</button>
     </div>
 
-    <div id="graphBox">
-      <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
+    <!-- Configuration collapsible (collapses ONLY config fields) -->
+    <button id="configToggleBtn" class="pillBtn active" type="button">
+      Configuration
+    </button>
+
+    <div id="configFields" style="margin-top:10px;">
+      <div class="fieldRow">
+        <label for="totalNodes">Number of nodes</label>
+        <select id="totalNodes"></select>
+      </div>
+
+      <div class="fieldRow">
+        <label for="mobileNodes">Number of mobile nodes</label>
+        <select id="mobileNodes"></select>
+      </div>
+
+      <div class="fieldRow">
+        <label for="cameraMode">Rate of topology changes</label>
+        <select id="cameraMode">
+          <option value="500">500ms</option>
+          <option value="1000" selected>1s</option>
+          <option value="2000">2s</option>
+          <option value="4000">4s</option>
+        </select>
+      </div>
+
+      <div class="fieldRow">
+        <label for="reconfigMode">Reconfiguration</label>
+        <select id="reconfigMode">
+          <option value="holistic" selected>Holistic</option>
+          <option value="incremental">Incremental</option>
+        </select>
+      </div>
+
+      <div class="fieldRow">
+        <button id="applyConfigBtn" type="button">Apply (Start)</button>
+        <button id="stopBtn" type="button" disabled>Stop</button>
+        <button id="resetViewBtn" type="button">Reset view</button>
+      </div>
+
+      <div class="small" id="pendingHint" style="margin-top:6px; opacity:0.7;">
+        Changes apply only when you click <b>Apply</b>.
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <!-- Scenarios (multi-select) -->
+    <div class="panelTitle" style="margin-bottom:6px;">Scenarios</div>
+    <div class="tabsCol" role="tablist" aria-label="Scenario">
+      <button id="scenarioViz" class="scenarioBtn" type="button"><span class="dot"></span>Visualization (Map)</button>
+      <button id="scenarioTopo" class="scenarioBtn" type="button"><span class="dot"></span>Topology graph</button>
+      <button id="scenarioShots" class="scenarioBtn" type="button"><span class="dot"></span>Snapshots (Latency graph)</button>
     </div>
   </div>
 </div>
 
-<!-- Topology graph: BOTTOM-RIGHT -->
-<div id="topologyHUD">
+<!-- Topology graph -->
+<div id="topologyHUD" style="display:none;">
   <div class="panel" id="topologyPanel">
     <div class="panelHeader">
       <div class="panelTitle">Topology graph</div>
@@ -326,7 +439,33 @@
   </div>
 </div>
 
-<!-- Bottom-left Train UI (NOW DEBUG-TOGGLED) -->
+<!-- Snapshots HUD: LEFT (contains saved run images/list + live latency graph at bottom) -->
+<div id="snapshotsHUD" style="display:none;">
+  <div class="panel" id="snapshotsPanel">
+    <div class="panelHeader">
+      <div class="panelTitle">Snapshots</div>
+      <div class="small" id="graphTitle" style="text-align:right;">—</div>
+    </div>
+
+    <div class="small" style="opacity:0.8;">
+      Saved runs appear here after you press <b>Stop</b>.
+    </div>
+
+    <div id="snapshotsBox"></div>
+
+    <div class="hr"></div>
+
+    <div class="small" style="opacity:0.75; margin-bottom:8px;">
+      Live latency graph (captured into snapshots on Stop)
+    </div>
+
+    <div id="graphBox">
+      <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom-left Train UI (DEBUG-TOGGLED) -->
 <div id="ui" class="collapsed">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -374,7 +513,7 @@ const INIT = {
 };
 
 // -----------------------------------------------------
-// THREE (must be created BEFORE loader.load uses them)
+// THREE
 // -----------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
@@ -409,8 +548,12 @@ sun.position.set(2000, 4000, 1000);
 scene.add(sun);
 
 // -----------------------------------------------------
-// CONFIG
+// REFS
 // -----------------------------------------------------
+const setupHUDEl = document.getElementById('setupHUD');
+const hideControlBtn = document.getElementById('hideControlBtn');
+const showControlBtn = document.getElementById('showControlBtn');
+
 const totalNodesEl = document.getElementById('totalNodes');
 const mobileNodesEl = document.getElementById('mobileNodes');
 const cameraModeEl  = document.getElementById('cameraMode');
@@ -421,19 +564,38 @@ const stopBtn = document.getElementById('stopBtn');
 const resetViewBtn = document.getElementById('resetViewBtn');
 const graphTitleEl = document.getElementById('graphTitle');
 
-const tabVizEl = document.getElementById('tabViz');
-const tabSnapshotsEl = document.getElementById('tabSnapshots');
-const setupBodyEl = document.getElementById('setupBody');
-const snapshotsBodyEl = document.getElementById('snapshotsBody');
-const graphHUDEl = document.getElementById('graphHUD');
 const topologyHUDEl = document.getElementById('topologyHUD');
-const snapshotsListEl = document.getElementById('snapshotsList');
+const snapshotsHUDEl = document.getElementById('snapshotsHUD');
+
+const configToggleBtn = document.getElementById('configToggleBtn');
+const configFieldsEl  = document.getElementById('configFields');
+
+const scenarioVizBtn   = document.getElementById('scenarioViz');
+const scenarioTopoBtn  = document.getElementById('scenarioTopo');
+const scenarioShotsBtn = document.getElementById('scenarioShots');
+
+const snapshotsBoxEl = document.getElementById('snapshotsBox');
 
 function msToLabel(ms){
   if (ms >= 1000) return `${(ms/1000)}s`;
   return `${ms}ms`;
 }
 
+// -----------------------------------------------------
+// CONTROL PANEL HIDE/SHOW
+// -----------------------------------------------------
+function setControlPanelVisible(visible){
+  if (!setupHUDEl || !showControlBtn) return;
+  setupHUDEl.classList.toggle('hidden', !visible);
+  showControlBtn.classList.toggle('visible', !visible);
+}
+hideControlBtn?.addEventListener('click', () => setControlPanelVisible(false));
+showControlBtn?.addEventListener('click', () => setControlPanelVisible(true));
+setControlPanelVisible(true);
+
+// -----------------------------------------------------
+// CONFIG SELECTS
+// -----------------------------------------------------
 function fillSelectRange(selectEl, min, max) {
   selectEl.innerHTML = '';
   for (let v = min; v <= max; v++) {
@@ -463,7 +625,6 @@ mobileNodesEl.value = '2';
 cameraModeEl.value = '1000';
 reconfigModeEl.value = 'holistic';
 
-// active config (applied only on Apply)
 let activeConfig = {
   totalNodes: 4,
   mobileNodes: 2,
@@ -476,8 +637,81 @@ function setGraphTitleFromActive(extra = ''){
   const base = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
   graphTitleEl.textContent = extra ? `${base} — ${extra}` : base;
 }
+setGraphTitleFromActive('idle');
 
 totalNodesEl.addEventListener('change', rebuildMobileOptionsPreserveSelection);
+
+// -----------------------------------------------------
+// CONFIG COLLAPSE (only fields)
+// -----------------------------------------------------
+let configOpen = true;
+function setConfigOpen(open){
+  configOpen = open;
+  if (configFieldsEl) configFieldsEl.style.display = open ? 'block' : 'none';
+  if (configToggleBtn) configToggleBtn.classList.toggle('active', open);
+}
+configToggleBtn?.addEventListener('click', () => setConfigOpen(!configOpen));
+setConfigOpen(true);
+
+// -----------------------------------------------------
+// SCENARIOS
+// Visualization => show/hide MAP (three.js scene)
+// Topology graph => show topology HUD
+// Snapshots => show snapshots HUD (contains live latency graph at bottom + snapshot images)
+// -----------------------------------------------------
+const scenario = { map: false, topo: false, shots: false };
+
+function setBtnActive(btn, on){
+  btn?.classList.toggle('active', !!on);
+}
+
+function applyScenarioLayout(){
+  const mapOn = scenario.map;      // Visualization (map)
+  const topoOn = scenario.topo;    // Topology HUD
+  const shotsOn = scenario.shots;  // Snapshots HUD
+
+  // no-overlap mode for map ON with topo+shots
+  const noOverlap = mapOn && topoOn && shotsOn;
+  document.body.classList.toggle('noOverlapHUD', noOverlap);
+
+  setBtnActive(scenarioVizBtn, mapOn);
+  setBtnActive(scenarioTopoBtn, topoOn);
+  setBtnActive(scenarioShotsBtn, shotsOn);
+
+  // --- MAP show/hide ---
+  renderer.domElement.style.display = mapOn ? 'block' : 'none';
+
+  // --- HUD toggles ---
+  if (snapshotsHUDEl) snapshotsHUDEl.style.display = shotsOn ? 'block' : 'none';
+  if (topologyHUDEl) topologyHUDEl.style.display = topoOn ? 'block' : 'none';
+
+  // If nothing selected: only control panel
+  if (!mapOn && !topoOn && !shotsOn) {
+    renderer.domElement.style.display = 'none';
+    if (topologyHUDEl) topologyHUDEl.style.display = 'none';
+    if (snapshotsHUDEl) snapshotsHUDEl.style.display = 'none';
+    document.body.classList.remove('splitMode','soloTopo','soloShots');
+    return;
+  }
+
+  // Split mode when map is OFF: big panes
+  const split = !mapOn && (topoOn || shotsOn);
+  document.body.classList.toggle('splitMode', split);
+  document.body.classList.toggle('soloTopo', split && topoOn && !shotsOn);
+  document.body.classList.toggle('soloShots', split && shotsOn && !topoOn);
+
+  // keep canvases sized correctly when shown
+  if (shotsOn) renderGraph();
+  if (topoOn) renderTopology();
+}
+
+scenarioVizBtn?.addEventListener('click', () => { scenario.map = !scenario.map; applyScenarioLayout(); });
+scenarioTopoBtn?.addEventListener('click', () => { scenario.topo = !scenario.topo; applyScenarioLayout(); });
+scenarioShotsBtn?.addEventListener('click', () => { scenario.shots = !scenario.shots; applyScenarioLayout(); });
+
+// Start with map ON (common), topo OFF, shots OFF.
+scenario.map = true;
+applyScenarioLayout();
 
 // -----------------------------------------------------
 // EXPERIMENT STATE
@@ -491,12 +725,9 @@ let exp = {
   maxPoints: 2500,
   lastTopoEventMs: 0,
   frozen: false,
-
-  // keep x-axis scrolling after stop (without new points)
   scrollAfterStop: false,
-
   holistic: {
-    phase: 'idle',       // 'idle' | 'ramping' | 'frozen'
+    phase: 'idle',
     rampStartMs: 0,
     rampDurationMs: 10000,
     baseAtRampStart: 0,
@@ -510,7 +741,6 @@ function resetExperimentGraph(){
   exp.points = [];
   exp.frozen = false;
   exp.lastTopoEventMs = 0;
-
   exp.scrollAfterStop = false;
 
   exp.holistic.phase = 'idle';
@@ -520,7 +750,7 @@ function resetExperimentGraph(){
 }
 
 // -----------------------------------------------------
-// GRAPH — LOG Y AXIS + DYNAMIC X TICKS
+// GRAPH (latency) — now inside Snapshots panel bottom
 // -----------------------------------------------------
 const graphCanvas = document.getElementById('graphCanvas');
 const gctx = graphCanvas?.getContext('2d');
@@ -605,13 +835,9 @@ function drawGraph(points) {
     ctx.fillText(`10${SUPER[expn]}`, x0 - 8, y);
   });
 
-  // X axis time range
   const hasData = points.length >= 2;
-
   const tNowSec = exp.startMs ? ((nowMs() - exp.startMs) / 1000) : 0;
   const tMaxData = hasData ? points[points.length - 1].tSec : 0;
-
-  // NOTE: if scrollAfterStop=false, axis uses last data time after stop
   const tMaxAxis = (exp.running || exp.scrollAfterStop) ? tNowSec : tMaxData;
   const tMin = Math.max(0, tMaxAxis - 150);
 
@@ -620,7 +846,7 @@ function drawGraph(points) {
     return x0 + tt * (x1 - x0);
   };
 
-  // --- DYNAMIC X TICKS ---
+  // Dynamic X ticks
   ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.textAlign = 'center';
@@ -638,7 +864,6 @@ function drawGraph(points) {
     return 10 * p;
   }
   const step = niceStep(span / MAX_TICKS);
-
   let tTick = Math.ceil(tMin / step) * step;
 
   for (; tTick <= tMaxAxis + 1e-6; tTick += step) {
@@ -688,24 +913,11 @@ function drawGraph(points) {
 
     ctx.closePath();
     ctx.fill();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    const dotStep = Math.max(1, Math.floor(points.length / 120));
-    for (let i = 0; i < points.length; i += dotStep) {
-      const pt = points[i];
-      if (pt.tSec < tMin) continue;
-      const x = xAtT(pt.tSec);
-      const y = yAt(pt.v);
-      ctx.beginPath();
-      ctx.arc(x, y, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
 
-  // axis labels
+  // Labels
   ctx.fillStyle = 'rgba(0,0,0,0.70)';
   ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText('runtime (sec.)', (x0 + x1) / 2, h - 10);
@@ -716,7 +928,6 @@ function drawGraph(points) {
   ctx.fillText('event-time latency', 0, 0);
   ctx.restore();
 
-  // status label + runtime overlay
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   const status = exp.running ? (exp.frozen ? 'RUNNING (graph frozen)' : 'RUNNING') : 'STOPPED';
@@ -732,8 +943,6 @@ function renderGraph(){
   resizeGraphCanvasToCSS();
   drawGraph(exp.points);
 }
-window.addEventListener('resize', renderGraph);
-renderGraph();
 
 // -----------------------------------------------------
 // TOPOLOGY GRAPH (placeholder)
@@ -752,6 +961,7 @@ function resizeTopoCanvasToCSS() {
   if (tctx) tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+/* UPDATED: reduce internal drawing scale (do NOT change panel size) */
 function autoFit(ctx, w, h, drawFn) {
   const pad = 18;
   const DW = 420;
@@ -759,7 +969,11 @@ function autoFit(ctx, w, h, drawFn) {
 
   const sx = (w - pad * 2) / DW;
   const sy = (h - pad * 2) / DH;
-  const s = Math.min(sx, sy) * 1.4;
+
+  const fit = Math.min(sx, sy);
+
+  // cap scaling so it doesn't blow up when panel is half-screen
+  const s = Math.min(fit * 1.05, 1.10);
 
   ctx.save();
   ctx.translate((w - DW * s) / 2, (h - DH * s) / 2);
@@ -883,36 +1097,15 @@ function renderTopology() {
   resizeTopoCanvasToCSS();
   drawTopologyPlaceholder();
 }
-renderTopology();
-window.addEventListener('resize', renderTopology);
 
 // -----------------------------------------------------
-// SNAPSHOTS
+// SNAPSHOTS LIST (left HUD)
 // -----------------------------------------------------
 const snapshots = []; // { title, runtimeSec, dataUrl, when }
 
-function addSnapshot(){
-  renderGraph();
-
-  const c = activeConfig;
-  const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
-  const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
-
-  const dataUrl = graphCanvas.toDataURL('image/png');
-
-  snapshots.unshift({
-    title,
-    runtimeSec,
-    dataUrl,
-    when: new Date().toLocaleString()
-  });
-
-  renderSnapshotsList();
-}
-
 function renderSnapshotsList(){
-  if (!snapshotsListEl) return;
-  snapshotsListEl.innerHTML = '';
+  if (!snapshotsBoxEl) return;
+  snapshotsBoxEl.innerHTML = '';
 
   if (!snapshots.length){
     const empty = document.createElement('div');
@@ -920,7 +1113,7 @@ function renderSnapshotsList(){
     empty.style.opacity = '0.75';
     empty.style.marginTop = '10px';
     empty.textContent = 'No snapshots yet.';
-    snapshotsListEl.appendChild(empty);
+    snapshotsBoxEl.appendChild(empty);
     return;
   }
 
@@ -945,94 +1138,29 @@ function renderSnapshotsList(){
     wrap.appendChild(m);
     wrap.appendChild(img);
 
-    snapshotsListEl.appendChild(wrap);
+    snapshotsBoxEl.appendChild(wrap);
   }
 }
 renderSnapshotsList();
 
-// -----------------------------------------------------
-// TRAIN UI (NOW CODE-TOGGLED VIA DEBUG.showTrainSettings)
-// -----------------------------------------------------
-const uiEl = document.getElementById('ui');
+function addSnapshot(){
+  renderGraph();
 
-// Always hide/show panel based on DEBUG flag (no user-facing control needed)
-function applyTrainUIVisibility() {
-  if (!uiEl) return;
-  uiEl.style.display = DEBUG.showTrainSettings ? 'block' : 'none';
-}
-applyTrainUIVisibility();
+  const c = activeConfig;
+  const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
+  const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
 
-// If hidden, we still keep speed/train defaults in code
-const trainCountEl = document.getElementById('trainCount');
-const trainCountVal = document.getElementById('trainCountVal');
-const speedEl = document.getElementById('speed');
-const speedVal = document.getElementById('speedVal');
-const toggleUIBtn = document.getElementById('toggleUIBtn');
+  const dataUrl = graphCanvas.toDataURL('image/png');
 
-// If the UI is visible, allow collapsing; if not, no need for toggle
-if (DEBUG.showTrainSettings) {
-  function syncToggleLabel() {
-    toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
-  }
-  syncToggleLabel();
-
-  toggleUIBtn.addEventListener('click', () => {
-    uiEl.classList.toggle('collapsed');
-    syncToggleLabel();
+  snapshots.unshift({
+    title,
+    runtimeSec,
+    dataUrl,
+    when: new Date().toLocaleString()
   });
+
+  renderSnapshotsList();
 }
-
-// Settings always exist (even if UI hidden)
-const settings = {
-  trainCount: 2,
-  speedUser: speedEl ? parseFloat(speedEl.value) : 0.03,
-  speedActive: 0, // trains do NOT move at load
-};
-
-function syncUI() {
-  if (!DEBUG.showTrainSettings) return;
-  if (trainCountVal && trainCountEl) {
-    trainCountVal.textContent = String(settings.trainCount);
-    trainCountEl.value = String(settings.trainCount);
-  }
-  if (speedVal) speedVal.textContent = settings.speedUser.toFixed(3);
-}
-syncUI();
-
-if (speedEl) {
-  speedEl.addEventListener('input', () => {
-    settings.speedUser = parseFloat(speedEl.value);
-    syncUI();
-    if (exp.running) settings.speedActive = settings.speedUser;
-  });
-}
-
-// -----------------------------------------------------
-// TABS
-// -----------------------------------------------------
-function setTab(mode){
-  const isViz = mode === 'viz';
-
-  tabVizEl?.classList.toggle('active', isViz);
-  tabSnapshotsEl?.classList.toggle('active', !isViz);
-
-  if (setupBodyEl) setupBodyEl.style.display = isViz ? 'block' : 'none';
-  if (snapshotsBodyEl) snapshotsBodyEl.style.display = isViz ? 'none' : 'block';
-
-  if (graphHUDEl) graphHUDEl.style.display = isViz ? 'block' : 'none';
-  if (topologyHUDEl) topologyHUDEl.style.display = isViz ? 'block' : 'none';
-
-  if (isViz) {
-    renderGraph();
-    renderTopology();
-  } else {
-    renderSnapshotsList();
-  }
-}
-
-tabVizEl?.addEventListener('click', () => setTab('viz'));
-tabSnapshotsEl?.addEventListener('click', () => setTab('snapshots'));
-setTab('viz');
 
 // -----------------------------------------------------
 // EXPERIMENT DATA GENERATION
@@ -1054,12 +1182,11 @@ function startExperiment(){
     reconfigMode: reconfigModeEl.value
   };
 
-  // trains match mobile nodes (regardless of whether UI is visible)
+  // trains match mobile nodes
   settings.trainCount = activeConfig.mobileNodes;
   syncUI();
   ensureTrainCount(settings.trainCount);
 
-  // start moving now
   settings.speedActive = settings.speedUser;
 
   resetExperimentGraph();
@@ -1127,7 +1254,7 @@ function startExperiment(){
 
     if (exp.points.length > exp.maxPoints) exp.points.splice(0, exp.points.length - exp.maxPoints);
 
-    renderGraph();
+    if (scenario.shots) renderGraph();
   }, 10);
 }
 
@@ -1142,16 +1269,14 @@ function stopExperiment(){
 
   exp.scrollAfterStop = false;
 
-  // stop trains but keep user slider value
   settings.speedActive = 0;
 
   setGraphTitleFromActive(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
-  renderGraph();
+  if (scenario.shots) renderGraph();
 
   stopBtn.disabled = true;
 
   addSnapshot();
-  renderSnapshotsList();
 }
 
 applyConfigBtn.addEventListener('click', startExperiment);
@@ -1177,7 +1302,6 @@ function setOrbitView(target, distance, yawDeg, elevationDeg) {
 // STATE (model / trains)
 // -----------------------------------------------------
 let rootRef = null;
-let trainPathMeshRef = null;
 let pathCurve = null;
 
 let rawTrainRef = null;
@@ -1187,7 +1311,6 @@ const trains = [];
 const trainData = [];
 
 let modelFixedQ = new THREE.Quaternion();
-
 let pathMesh = null;
 
 // -----------------------------------------------------
@@ -1210,59 +1333,73 @@ function resetRunAndTrainsToStart(){
 
   for (let i = 0; i < trainData.length; i++) trainData[i].u = 0;
 
-  if (pathCurve && trains.length) {
-    const worldUp = new THREE.Vector3(0, 1, 0);
-    const p = new THREE.Vector3();
-    const t0 = new THREE.Vector3();
-    const t1 = new THREE.Vector3();
-    const fwd = new THREE.Vector3();
-    const right = new THREE.Vector3();
-    const up2 = new THREE.Vector3();
-    const basisM = new THREE.Matrix4();
-    const targetQ = new THREE.Quaternion();
-
-    for (let i = 0; i < trains.length; i++) {
-      const rig = trains[i];
-      const visual = rig.userData.visual;
-      const d = trainData[i];
-
-      pathCurve.getPointAt(d.u, p);
-      rig.position.copy(p);
-      rig.position.z -= 10;
-
-      pathCurve.getTangentAt(d.u, t0);
-      pathCurve.getTangentAt((d.u + 0.01) % 1, t1);
-      fwd.copy(t0).lerp(t1, 0.6).normalize();
-
-      right.copy(worldUp).cross(fwd);
-      if (right.lengthSq() < 1e-12) right.set(1, 0, 0);
-      right.normalize();
-
-      up2.copy(fwd).cross(right).normalize();
-
-      basisM.makeBasis(right, up2, fwd);
-      targetQ.setFromRotationMatrix(basisM);
-      targetQ.multiply(modelFixedQ);
-
-      visual.quaternion.copy(targetQ);
-    }
-  }
-
   stopBtn.disabled = true;
   applyConfigBtn.textContent = 'Apply (Start)';
   setGraphTitleFromActive('idle');
 
-  renderGraph();
+  if (scenario.shots) renderGraph();
 }
 
 resetViewBtn?.addEventListener('click', () => {
   setOrbitView(controls.target, INIT.cam.dist, INIT.cam.yaw, INIT.cam.elev);
   resetRunAndTrainsToStart();
-  setTab('viz');
 });
 
 // -----------------------------------------------------
-// TRAIN COUNT / PATH / MODEL HELPERS
+// TRAIN UI (DEBUG.showTrainSettings)
+// -----------------------------------------------------
+const uiEl = document.getElementById('ui');
+
+function applyTrainUIVisibility() {
+  if (!uiEl) return;
+  uiEl.style.display = DEBUG.showTrainSettings ? 'block' : 'none';
+}
+applyTrainUIVisibility();
+
+const trainCountEl = document.getElementById('trainCount');
+const trainCountVal = document.getElementById('trainCountVal');
+const speedEl = document.getElementById('speed');
+const speedVal = document.getElementById('speedVal');
+const toggleUIBtn = document.getElementById('toggleUIBtn');
+
+if (DEBUG.showTrainSettings) {
+  function syncToggleLabel() {
+    toggleUIBtn.textContent = uiEl.classList.contains('collapsed') ? 'Show' : 'Hide';
+  }
+  syncToggleLabel();
+
+  toggleUIBtn.addEventListener('click', () => {
+    uiEl.classList.toggle('collapsed');
+    syncToggleLabel();
+  });
+}
+
+const settings = {
+  trainCount: 2,
+  speedUser: speedEl ? parseFloat(speedEl.value) : 0.03,
+  speedActive: 0,
+};
+
+function syncUI() {
+  if (!DEBUG.showTrainSettings) return;
+  if (trainCountVal && trainCountEl) {
+    trainCountVal.textContent = String(settings.trainCount);
+    trainCountEl.value = String(settings.trainCount);
+  }
+  if (speedVal) speedVal.textContent = settings.speedUser.toFixed(3);
+}
+syncUI();
+
+if (speedEl) {
+  speedEl.addEventListener('input', () => {
+    settings.speedUser = parseFloat(speedEl.value);
+    syncUI();
+    if (exp.running) settings.speedActive = settings.speedUser;
+  });
+}
+
+// -----------------------------------------------------
+// TRAIN COUNT / PATH / MODEL HELPERS (same as before)
 // -----------------------------------------------------
 function scorePolyline(pts) {
   if (!pts || pts.length < 2) return 0;
@@ -1593,8 +1730,9 @@ addEventListener('resize', () => {
   renderTopology();
 });
 
-// initial title
-setGraphTitleFromActive('idle');
+// initial canvas render
+renderGraph();
+renderTopology();
 </script>
 </body>
 </html>
