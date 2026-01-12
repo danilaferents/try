@@ -425,6 +425,15 @@
         </select>
       </div>
 
+      <!-- NEW: Query selection -->
+      <div class="fieldRow">
+        <label for="queryMode">Query</label>
+        <select id="queryMode">
+          <option value="stateful" selected>Stateful</option>
+          <option value="stateless">Stateless</option>
+        </select>
+      </div>
+
       <div class="fieldRow">
         <button id="applyConfigBtn" type="button">Apply (Start)</button>
         <button id="stopBtn" type="button" disabled>Stop</button>
@@ -578,6 +587,7 @@ const totalNodesEl = document.getElementById('totalNodes');
 const mobileNodesEl = document.getElementById('mobileNodes');
 const cameraModeEl  = document.getElementById('cameraMode');
 const reconfigModeEl = document.getElementById('reconfigMode');
+const queryModeEl = document.getElementById('queryMode'); // NEW
 
 const applyConfigBtn = document.getElementById('applyConfigBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -611,7 +621,6 @@ function setControlPanelVisible(visible){
 }
 
 function updateHudTopInset(){
-  // If control panel is hidden, no inset needed
   const isHidden = setupHUDEl?.classList.contains('hidden');
   if (isHidden) {
     document.body.style.setProperty('--hudTopInset', '10px');
@@ -635,11 +644,12 @@ setControlPanelVisible(true);
 updateHudTopInset();
 
 // -----------------------------------------------------
-// CONFIG SELECTS
+// CONFIG SELECTS (EVEN ONLY)
 // -----------------------------------------------------
-function fillSelectRange(selectEl, min, max) {
+function fillSelectRangeEven(selectEl, min, max) {
   selectEl.innerHTML = '';
-  for (let v = min; v <= max; v++) {
+  const start = (min % 2 === 0) ? min : (min + 1);
+  for (let v = start; v <= max; v += 2) {
     const opt = document.createElement('option');
     opt.value = String(v);
     opt.textContent = String(v);
@@ -647,41 +657,75 @@ function fillSelectRange(selectEl, min, max) {
   }
 }
 
-fillSelectRange(totalNodesEl, 2, 16);
-totalNodesEl.value = '4';
+function clampEven(v, min, max){
+  v = Math.round(v);
+  if (v % 2 !== 0) v += 1;
+  v = Math.max(min, Math.min(max, v));
+  if (v % 2 !== 0) v -= 1;
+  return v;
+}
+
+// total nodes: even only
+fillSelectRangeEven(totalNodesEl, 2, 16);
+
+// Default: 4 mobile + 8 fixed => 12 total nodes
+totalNodesEl.value = '12';
 
 function rebuildMobileOptionsPreserveSelection(){
   const total = parseInt(totalNodesEl.value, 10);
+
+  // keep your previous cap of 8, but even-only
   const maxMobile = Math.min(total, 8);
 
-  const current = parseInt(mobileNodesEl.value || '2', 10);
-  fillSelectRange(mobileNodesEl, 2, maxMobile);
+  const current = parseInt(mobileNodesEl.value || '4', 10);
+  fillSelectRangeEven(mobileNodesEl, 2, maxMobile);
 
-  const clamped = Math.min(Math.max(current, 2), maxMobile);
+  const clamped = clampEven(current, 2, maxMobile);
   mobileNodesEl.value = String(clamped);
 }
 rebuildMobileOptionsPreserveSelection();
-mobileNodesEl.value = '2';
+
+// Default mobile nodes = 4
+mobileNodesEl.value = '4';
 
 cameraModeEl.value = '1000';
 reconfigModeEl.value = 'holistic';
+queryModeEl.value = 'stateful';
 
 let activeConfig = {
-  totalNodes: 4,
-  mobileNodes: 2,
+  totalNodes: 12,
+  mobileNodes: 4,
   topoChangeMs: 1000,
-  reconfigMode: 'holistic'
+  reconfigMode: 'holistic',
+  queryMode: 'stateful'
 };
 
 function setGraphTitleFromActive(extra = ''){
   const c = activeConfig;
-  const base = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
+  const fixed = Math.max(0, c.totalNodes - c.mobileNodes);
+  const base =
+    `${c.mobileNodes} mobile / ${fixed} fixed (${c.totalNodes} total) / ` +
+    `${msToLabel(c.topoChangeMs)} / ${c.reconfigMode} / ${c.queryMode}`;
   graphTitleEl.textContent = extra ? `${base} — ${extra}` : base;
 }
 setGraphTitleFromActive('idle');
 
 totalNodesEl.addEventListener('change', () => {
+  // ensure even selection (defensive, in case of manual DOM edits)
+  const total = clampEven(parseInt(totalNodesEl.value, 10) || 12, 4, 32);
+  totalNodesEl.value = String(total);
+
+  // if mobile exceeds total, rebuild will clamp
   rebuildMobileOptionsPreserveSelection();
+  updateHudTopInset();
+});
+
+mobileNodesEl.addEventListener('change', () => {
+  // ensure even + within bounds
+  const total = parseInt(totalNodesEl.value, 10);
+  const maxMobile = Math.min(total, 8);
+  const m = clampEven(parseInt(mobileNodesEl.value, 10) || 4, 2, maxMobile);
+  mobileNodesEl.value = String(m);
   updateHudTopInset();
 });
 
@@ -693,7 +737,7 @@ function setConfigOpen(open){
   configOpen = open;
   if (configFieldsEl) configFieldsEl.style.display = open ? 'block' : 'none';
   if (configToggleBtn) configToggleBtn.classList.toggle('active', open);
-  updateHudTopInset(); // height changed
+  updateHudTopInset();
 }
 configToggleBtn?.addEventListener('click', () => setConfigOpen(!configOpen));
 setConfigOpen(true);
@@ -712,7 +756,6 @@ function applyScenarioLayout(){
   const topoOn = scenario.topo;
   const shotsOn = scenario.shots;
 
-  // ensure topo+shots don't overlap when map is on
   const noOverlap = mapOn && topoOn && shotsOn;
   document.body.classList.toggle('noOverlapHUD', noOverlap);
 
@@ -1199,7 +1242,11 @@ function addSnapshot(){
   renderGraph();
 
   const c = activeConfig;
-  const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
+  const fixed = Math.max(0, c.totalNodes - c.mobileNodes);
+  const title =
+    `${c.mobileNodes} mobile / ${fixed} fixed (${c.totalNodes} total) / ` +
+    `${msToLabel(c.topoChangeMs)} / ${c.reconfigMode} / ${c.queryMode}`;
+
   const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
   const dataUrl = graphCanvas.toDataURL('image/png');
 
@@ -1227,11 +1274,20 @@ function genBaseline(){
 }
 
 function startExperiment(){
+  // enforce even values (defensive)
+  const total = clampEven(parseInt(totalNodesEl.value, 10) || 12, 4, 32);
+  totalNodesEl.value = String(total);
+
+  const maxMobile = Math.min(total, 8);
+  const mobile = clampEven(parseInt(mobileNodesEl.value, 10) || 4, 2, maxMobile);
+  mobileNodesEl.value = String(mobile);
+
   activeConfig = {
-    totalNodes: parseInt(totalNodesEl.value, 10),
-    mobileNodes: parseInt(mobileNodesEl.value, 10),
+    totalNodes: total,
+    mobileNodes: mobile,
     topoChangeMs: parseInt(cameraModeEl.value, 10),
-    reconfigMode: reconfigModeEl.value
+    reconfigMode: reconfigModeEl.value,
+    queryMode: queryModeEl.value
   };
 
   // trains match mobile nodes
