@@ -14,6 +14,9 @@
       position: relative;
       z-index: 0;
       background: #d5d5d5;
+
+      /* dynamic inset so split panes never start under control panel */
+      --hudTopInset: 10px;
     }
 
     body::before {
@@ -48,7 +51,7 @@
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 10;
+      z-index: 30;          /* ALWAYS above */
       pointer-events: none;
     }
 
@@ -104,7 +107,7 @@
       width: 340px;
     }
 
-    /* snapshots panel sizing (left, expands upward; allow it to get big) */
+    /* snapshots panel sizing */
     #snapshotsPanel{
       width: 520px;
     }
@@ -114,7 +117,7 @@
       padding-right: 6px;
     }
 
-    /* Graph box (now inside Snapshots panel at bottom) */
+    /* Graph box (inside Snapshots panel bottom) */
     #graphBox {
       height: 250px;
       border-radius: 8px;
@@ -152,7 +155,7 @@
     button:hover { background: rgba(255,255,255,0.92); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Scenario buttons: keep blue dot + shadows, no blue fill highlight */
+    /* Scenario buttons */
     .tabsCol{
       pointer-events:auto;
       display:flex;
@@ -201,7 +204,7 @@
       position:absolute;
       top:10px;
       left:10px;
-      z-index: 11;
+      z-index: 31;
       pointer-events:auto;
       display:none;
     }
@@ -222,8 +225,9 @@
       border-color: rgba(0,0,0,0.28);
     }
 
-    /* Snapshots cards */
+    /* Snapshots cards + delete X */
     .shot{
+      position: relative;
       border:1px solid rgba(0,0,0,0.10);
       border-radius:10px;
       background: rgba(255,255,255,0.7);
@@ -235,6 +239,7 @@
       font-size:12px;
       margin-bottom:6px;
       line-height:1.2;
+      padding-right: 26px; /* room for X */
     }
     .shotMeta{
       font-size:11px;
@@ -246,6 +251,29 @@
       border-radius:8px;
       border:1px dashed rgba(0,0,0,0.20);
       display:block;
+    }
+    .shotDel{
+      position:absolute;
+      top:8px;
+      right:8px;
+      width:22px;
+      height:22px;
+      border-radius:8px;
+      padding:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:900;
+      line-height:1;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(0,0,0,0.14);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.10);
+      cursor:pointer;
+    }
+    .shotDel:hover{
+      background: rgba(255,255,255,0.98);
+      border-color: rgba(0,0,0,0.22);
+      transform: translateY(-1px);
     }
 
     /* Bottom-left Train UI (unchanged) */
@@ -270,16 +298,14 @@
 
     /* ---------------------------------------------------
        SPLIT LAYOUT (when map is OFF)
-       - topology takes right half (big)
-       - snapshots takes left half (big)
-       - if only one is enabled, it takes full width
+       - panes start BELOW control panel using --hudTopInset
     --------------------------------------------------- */
     body.splitMode #topologyHUD,
     body.splitMode #snapshotsHUD{
       position: fixed;
-      top: 10px;
+      top: var(--hudTopInset);
       bottom: 10px;
-      z-index: 9; /* below setupHUD so control panel stays clickable */
+      z-index: 9; /* below setupHUD so control panel never gets covered */
     }
 
     body.splitMode #snapshotsHUD{
@@ -332,7 +358,6 @@
 
     /* ---------------------------------------------------
        NO OVERLAP (map ON + topo+shots ON)
-       Force topology to TOP-RIGHT so it never collides with bottom-left snapshots
     --------------------------------------------------- */
     body.noOverlapHUD #topologyHUD{
       top: 10px;
@@ -369,10 +394,7 @@
       <button id="hideControlBtn" type="button" title="Hide panel">Hide</button>
     </div>
 
-    <!-- Configuration collapsible (collapses ONLY config fields) -->
-    <button id="configToggleBtn" class="pillBtn active" type="button">
-      Configuration
-    </button>
+    <button id="configToggleBtn" class="pillBtn active" type="button">Configuration</button>
 
     <div id="configFields" style="margin-top:10px;">
       <div class="fieldRow">
@@ -416,7 +438,6 @@
 
     <div class="hr"></div>
 
-    <!-- Scenarios (multi-select) -->
     <div class="panelTitle" style="margin-bottom:6px;">Scenarios</div>
     <div class="tabsCol" role="tablist" aria-label="Scenario">
       <button id="scenarioViz" class="scenarioBtn" type="button"><span class="dot"></span>Visualization (Map)</button>
@@ -439,7 +460,7 @@
   </div>
 </div>
 
-<!-- Snapshots HUD: LEFT (contains saved run images/list + live latency graph at bottom) -->
+<!-- Snapshots HUD -->
 <div id="snapshotsHUD" style="display:none;">
   <div class="panel" id="snapshotsPanel">
     <div class="panelHeader">
@@ -497,10 +518,9 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 /**
  * DEBUG TOGGLES
- * - Set showTrainSettings=true to show the Train settings panel.
  */
 const DEBUG = {
-  showTrainSettings: false, // <-- toggle this
+  showTrainSettings: false,
 };
 
 const MODEL_URL = 'models/gltf/Berlin.glb';
@@ -582,16 +602,37 @@ function msToLabel(ms){
 }
 
 // -----------------------------------------------------
-// CONTROL PANEL HIDE/SHOW
+// CONTROL PANEL HIDE/SHOW + dynamic split top inset
 // -----------------------------------------------------
 function setControlPanelVisible(visible){
   if (!setupHUDEl || !showControlBtn) return;
   setupHUDEl.classList.toggle('hidden', !visible);
   showControlBtn.classList.toggle('visible', !visible);
 }
-hideControlBtn?.addEventListener('click', () => setControlPanelVisible(false));
-showControlBtn?.addEventListener('click', () => setControlPanelVisible(true));
+
+function updateHudTopInset(){
+  // If control panel is hidden, no inset needed
+  const isHidden = setupHUDEl?.classList.contains('hidden');
+  if (isHidden) {
+    document.body.style.setProperty('--hudTopInset', '10px');
+    return;
+  }
+
+  const panel = document.getElementById('setupPanel');
+  if (!panel) {
+    document.body.style.setProperty('--hudTopInset', '10px');
+    return;
+  }
+
+  const r = panel.getBoundingClientRect();
+  const inset = Math.min(window.innerHeight - 20, Math.ceil(r.bottom + 10));
+  document.body.style.setProperty('--hudTopInset', `${inset}px`);
+}
+
+hideControlBtn?.addEventListener('click', () => { setControlPanelVisible(false); updateHudTopInset(); });
+showControlBtn?.addEventListener('click', () => { setControlPanelVisible(true);  updateHudTopInset(); });
 setControlPanelVisible(true);
+updateHudTopInset();
 
 // -----------------------------------------------------
 // CONFIG SELECTS
@@ -639,7 +680,10 @@ function setGraphTitleFromActive(extra = ''){
 }
 setGraphTitleFromActive('idle');
 
-totalNodesEl.addEventListener('change', rebuildMobileOptionsPreserveSelection);
+totalNodesEl.addEventListener('change', () => {
+  rebuildMobileOptionsPreserveSelection();
+  updateHudTopInset();
+});
 
 // -----------------------------------------------------
 // CONFIG COLLAPSE (only fields)
@@ -649,15 +693,13 @@ function setConfigOpen(open){
   configOpen = open;
   if (configFieldsEl) configFieldsEl.style.display = open ? 'block' : 'none';
   if (configToggleBtn) configToggleBtn.classList.toggle('active', open);
+  updateHudTopInset(); // height changed
 }
 configToggleBtn?.addEventListener('click', () => setConfigOpen(!configOpen));
 setConfigOpen(true);
 
 // -----------------------------------------------------
 // SCENARIOS
-// Visualization => show/hide MAP (three.js scene)
-// Topology graph => show topology HUD
-// Snapshots => show snapshots HUD (contains live latency graph at bottom + snapshot images)
 // -----------------------------------------------------
 const scenario = { map: false, topo: false, shots: false };
 
@@ -666,11 +708,11 @@ function setBtnActive(btn, on){
 }
 
 function applyScenarioLayout(){
-  const mapOn = scenario.map;      // Visualization (map)
-  const topoOn = scenario.topo;    // Topology HUD
-  const shotsOn = scenario.shots;  // Snapshots HUD
+  const mapOn = scenario.map;
+  const topoOn = scenario.topo;
+  const shotsOn = scenario.shots;
 
-  // no-overlap mode for map ON with topo+shots
+  // ensure topo+shots don't overlap when map is on
   const noOverlap = mapOn && topoOn && shotsOn;
   document.body.classList.toggle('noOverlapHUD', noOverlap);
 
@@ -678,38 +720,35 @@ function applyScenarioLayout(){
   setBtnActive(scenarioTopoBtn, topoOn);
   setBtnActive(scenarioShotsBtn, shotsOn);
 
-  // --- MAP show/hide ---
   renderer.domElement.style.display = mapOn ? 'block' : 'none';
 
-  // --- HUD toggles ---
   if (snapshotsHUDEl) snapshotsHUDEl.style.display = shotsOn ? 'block' : 'none';
   if (topologyHUDEl) topologyHUDEl.style.display = topoOn ? 'block' : 'none';
 
-  // If nothing selected: only control panel
   if (!mapOn && !topoOn && !shotsOn) {
     renderer.domElement.style.display = 'none';
     if (topologyHUDEl) topologyHUDEl.style.display = 'none';
     if (snapshotsHUDEl) snapshotsHUDEl.style.display = 'none';
     document.body.classList.remove('splitMode','soloTopo','soloShots');
+    updateHudTopInset();
     return;
   }
 
-  // Split mode when map is OFF: big panes
   const split = !mapOn && (topoOn || shotsOn);
   document.body.classList.toggle('splitMode', split);
   document.body.classList.toggle('soloTopo', split && topoOn && !shotsOn);
   document.body.classList.toggle('soloShots', split && shotsOn && !topoOn);
 
-  // keep canvases sized correctly when shown
   if (shotsOn) renderGraph();
   if (topoOn) renderTopology();
+
+  updateHudTopInset();
 }
 
 scenarioVizBtn?.addEventListener('click', () => { scenario.map = !scenario.map; applyScenarioLayout(); });
 scenarioTopoBtn?.addEventListener('click', () => { scenario.topo = !scenario.topo; applyScenarioLayout(); });
 scenarioShotsBtn?.addEventListener('click', () => { scenario.shots = !scenario.shots; applyScenarioLayout(); });
 
-// Start with map ON (common), topo OFF, shots OFF.
 scenario.map = true;
 applyScenarioLayout();
 
@@ -750,7 +789,7 @@ function resetExperimentGraph(){
 }
 
 // -----------------------------------------------------
-// GRAPH (latency) — now inside Snapshots panel bottom
+// GRAPH (latency)
 // -----------------------------------------------------
 const graphCanvas = document.getElementById('graphCanvas');
 const gctx = graphCanvas?.getContext('2d');
@@ -808,7 +847,6 @@ function drawGraph(points) {
     return y0 + (1 - t) * (y1 - y0);
   };
 
-  // Y grid + labels
   ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.textAlign = 'right';
@@ -846,7 +884,6 @@ function drawGraph(points) {
     return x0 + tt * (x1 - x0);
   };
 
-  // Dynamic X ticks
   ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.textAlign = 'center';
@@ -888,7 +925,6 @@ function drawGraph(points) {
     ctx.fillText(label, x, y1 + 8);
   }
 
-  // Area series
   if (points.length >= 2) {
     ctx.fillStyle = 'rgba(115, 190, 110, 0.80)';
     ctx.beginPath();
@@ -915,7 +951,6 @@ function drawGraph(points) {
     ctx.fill();
   }
 
-  // Labels
   ctx.fillStyle = 'rgba(0,0,0,0.70)';
   ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.textAlign = 'center';
@@ -961,7 +996,7 @@ function resizeTopoCanvasToCSS() {
   if (tctx) tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-/* UPDATED: reduce internal drawing scale (do NOT change panel size) */
+/* keep drawing from overscaling inside big panels */
 function autoFit(ctx, w, h, drawFn) {
   const pad = 18;
   const DW = 420;
@@ -969,10 +1004,8 @@ function autoFit(ctx, w, h, drawFn) {
 
   const sx = (w - pad * 2) / DW;
   const sy = (h - pad * 2) / DH;
-
   const fit = Math.min(sx, sy);
 
-  // cap scaling so it doesn't blow up when panel is half-screen
   const s = Math.min(fit * 1.05, 1.10);
 
   ctx.save();
@@ -1099,9 +1132,15 @@ function renderTopology() {
 }
 
 // -----------------------------------------------------
-// SNAPSHOTS LIST (left HUD)
+// SNAPSHOTS LIST + delete
 // -----------------------------------------------------
 const snapshots = []; // { title, runtimeSec, dataUrl, when }
+
+function deleteSnapshotAt(index){
+  if (index < 0 || index >= snapshots.length) return;
+  snapshots.splice(index, 1);
+  renderSnapshotsList();
+}
 
 function renderSnapshotsList(){
   if (!snapshotsBoxEl) return;
@@ -1117,9 +1156,21 @@ function renderSnapshotsList(){
     return;
   }
 
-  for (const s of snapshots){
+  snapshots.forEach((s, idx) => {
     const wrap = document.createElement('div');
     wrap.className = 'shot';
+
+    const del = document.createElement('button');
+    del.className = 'shotDel';
+    del.type = 'button';
+    del.title = 'Delete snapshot';
+    del.textContent = '×';
+    del.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteSnapshotAt(idx);
+      updateHudTopInset();
+    });
 
     const t = document.createElement('div');
     t.className = 'shotTitle';
@@ -1134,12 +1185,13 @@ function renderSnapshotsList(){
     img.src = s.dataUrl;
     img.alt = s.title;
 
+    wrap.appendChild(del);
     wrap.appendChild(t);
     wrap.appendChild(m);
     wrap.appendChild(img);
 
     snapshotsBoxEl.appendChild(wrap);
-  }
+  });
 }
 renderSnapshotsList();
 
@@ -1149,7 +1201,6 @@ function addSnapshot(){
   const c = activeConfig;
   const title = `${c.mobileNodes} mobile / ${c.totalNodes} nodes / ${msToLabel(c.topoChangeMs)} / ${c.reconfigMode}`;
   const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
-
   const dataUrl = graphCanvas.toDataURL('image/png');
 
   snapshots.unshift({
@@ -1160,6 +1211,7 @@ function addSnapshot(){
   });
 
   renderSnapshotsList();
+  updateHudTopInset();
 }
 
 // -----------------------------------------------------
@@ -1238,18 +1290,14 @@ function startExperiment(){
           exp.frozen = true;
         }
       } else {
-        // frozen: do not add points
+        // frozen
       }
     }
 
     if (activeConfig.reconfigMode === 'incremental') {
       const baseline = genBaseline();
-      if (topoEvent) {
-        const spike = clampY(3000);
-        exp.points.push({ tSec, v: spike });
-      } else {
-        exp.points.push({ tSec, v: baseline });
-      }
+      if (topoEvent) exp.points.push({ tSec, v: clampY(3000) });
+      else exp.points.push({ tSec, v: baseline });
     }
 
     if (exp.points.length > exp.maxPoints) exp.points.splice(0, exp.points.length - exp.maxPoints);
@@ -1399,7 +1447,7 @@ if (speedEl) {
 }
 
 // -----------------------------------------------------
-// TRAIN COUNT / PATH / MODEL HELPERS (same as before)
+// TRAIN COUNT / PATH / MODEL HELPERS
 // -----------------------------------------------------
 function scorePolyline(pts) {
   if (!pts || pts.length < 2) return 0;
@@ -1728,11 +1776,13 @@ addEventListener('resize', () => {
   renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
   renderGraph();
   renderTopology();
+  updateHudTopInset();
 });
 
 // initial canvas render
 renderGraph();
 renderTopology();
+updateHudTopInset();
 </script>
 </body>
 </html>
