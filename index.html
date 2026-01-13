@@ -97,14 +97,14 @@
 
     /* Topology box */
     #topologyBox{
-      height:180px;
+      height:400px;
       border-radius:8px;
       border:1px dashed rgba(0,0,0,0.25);
       background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
       overflow:hidden;
     }
     #topologyPanel{
-      width: 340px;
+      width: 600px;
     }
 
     /* snapshots panel sizing */
@@ -1359,10 +1359,8 @@ function resizeTopoCanvasToCSS() {
   if (tctx) tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function autoFit(ctx, w, h, drawFn) {
+function autoFit(ctx, w, h, DW, DH, drawFn) {
   const pad = 18;
-  const DW = 420;
-  const DH = 300;
 
   const sx = (w - pad * 2) / DW;
   const sy = (h - pad * 2) / DH;
@@ -1451,40 +1449,165 @@ function drawTopologyPlaceholder() {
   ctx.fillStyle = 'rgba(0,0,0,0.01)';
   ctx.fillRect(0, 0, W, H);
 
-  autoFit(ctx, W, H, () => {
-    const DW = 420;
+  // -------- STATIC SETTINGS --------
+  const M = 4;  // MN1..MN4
+  const F = 8;  // FN1..FN8
+  // --------------------------------
+
+  function drawArrowOffset(x1, y1, x2, y2, color, w, offsetPx = 0) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    drawArrow(ctx, x1 + nx * offsetPx, y1 + ny * offsetPx, x2 + nx * offsetPx, y2 + ny * offsetPx, color, w);
+  }
+
+  // Design space (match your wide graph)
+  const DW = 860;
+  const DH = 420;
+
+  autoFit(ctx, W, H, DW, DH, () => {
     const cx = DW * 0.5;
-    const yTop = 32;
 
-    const MN1 = { x: cx - 95, y: yTop + 220 };
-    const MN2 = { x: cx + 95, y: yTop + 220 };
+    const nodeH = 34;
+    const yGap  = 68;
 
-    const FN1 = { x: cx - 95, y: yTop + 140 };
-    const FN2 = { x: cx + 95, y: yTop + 140 };
+    const mobile = Array.from({ length: M }, (_, i) => ({ id: `MN${i}`, label: `MN${i+1}`, kind: 'mobile' }));
+    const fixed  = Array.from({ length: F }, (_, i) => ({ id: `FN${i}`, label: `FN${i+1}`, kind: 'fixed' }));
 
-    const FN3 = { x: cx,      y: yTop + 70  };
+    const layers = [mobile, fixed];
 
-    const MN3 = { x: cx - 80, y: yTop + 20  };
-    const MN4 = { x: cx + 80, y: yTop + 20  };
+    // internal layers from fixed upwards (pair 2->1)
+    let prev = fixed.map(n => ({ ...n }));
+    let level = 0;
+    while (prev.length > 1) {
+      const next = [];
+      for (let i = 0; i < prev.length; i += 2) {
+        const left = prev[i];
+        const right = prev[i + 1];
+        const id = `N${level}_${Math.floor(i / 2)}`;
+        next.push({
+          id,
+          label: id,
+          kind: 'internal',
+          children: right ? [left.id, right.id] : [left.id]
+        });
+      }
+      layers.push(next);
+      prev = next.map(n => ({ ...n }));
+      level++;
+    }
 
-    drawArrow(ctx, MN1.x, MN1.y - 18, FN1.x, FN1.y + 18);
-    drawArrow(ctx, MN2.x, MN2.y - 18, FN2.x, FN2.y + 18);
+    const baseY = DH - 50; // bottom padding
+    const pos = new Map();
 
-    drawArrow(ctx, FN1.x, FN1.y - 18, FN3.x - 14, FN3.y + 18);
-    drawArrow(ctx, FN2.x, FN2.y - 18, FN3.x + 14, FN3.y + 18);
+    // spacing uses widest layer (usually fixed)
+    const maxCount = Math.max(1, ...layers.map(L => L.length || 1));
+    const spacing = Math.min(130, Math.max(78, (DW - 120) / Math.max(1, (maxCount - 1))));
 
-    drawArrow(ctx, FN3.x - 14, FN3.y - 18, MN3.x + 14, MN3.y + 18);
-    drawArrow(ctx, FN3.x + 14, FN3.y - 18, MN4.x - 14, MN4.y + 18);
+    function layerXs(count) {
+      const totalW = (count - 1) * spacing;
+      const start = cx - totalW / 2;
+      return Array.from({ length: count }, (_, i) => start + i * spacing);
+    }
 
-    drawRectNode(ctx, MN3.x, MN3.y, 'FN4');
-    drawRectNode(ctx, MN4.x, MN4.y, 'FN5');
-    drawRectNode(ctx, FN3.x, FN3.y, 'FN3');
+    // 1) place FIXED first (so mobiles can align under them)
+    {
+      const y = baseY - 1 * (nodeH + yGap);
+      const xs = layerXs(fixed.length);
+      for (let i = 0; i < fixed.length; i++) pos.set(fixed[i].id, { x: xs[i], y });
+    }
 
-    drawRectNode(ctx, FN1.x, FN1.y, 'FN1');
-    drawRectNode(ctx, FN2.x, FN2.y, 'FN2');
+    // 2) place MOBILE aligned under FN0..FN(M-1) (reduces diagonal overlap)
+    {
+      const y = baseY - 0 * (nodeH + yGap);
+      for (let i = 0; i < mobile.length; i++) {
+        const fnPos = pos.get(`FN${i}`);               // align to ith fixed
+        const x = fnPos ? fnPos.x : (cx + (i - (mobile.length-1)/2) * spacing);
+        pos.set(mobile[i].id, { x, y });
+      }
+    }
 
-    drawRectNode(ctx, MN1.x, MN1.y, 'MN1');
-    drawRectNode(ctx, MN2.x, MN2.y, 'MN2');
+    // 3) place INTERNAL layers above (centered normally)
+    for (let li = 2; li < layers.length; li++) {
+      const L = layers[li];
+      const y = baseY - li * (nodeH + yGap);
+      const xs = layerXs(L.length);
+      for (let i = 0; i < L.length; i++) pos.set(L[i].id, { x: xs[i], y });
+    }
+
+    for (let i = 0; i < M; i++) {
+      const fnA = pos.get(`FN${2 * i}`);
+      const fnB = pos.get(`FN${2 * i + 1}`);
+
+      if (!fnA || !fnB) continue;
+
+      const mn = pos.get(`MN${i}`);
+      if (!mn) continue;
+
+      // center MN horizontally between its two fixed nodes
+      mn.x = (fnA.x + fnB.x) * 0.5;
+    }
+
+    const NODE_W = 74;
+    const NODE_H = 34;
+
+    // keep arrow head from touching the rectangle border
+    const EDGE_GAP = 8;
+
+    const topOf = (id) => {
+      const p = pos.get(id);
+      return { x: p.x, y: p.y - (NODE_H / 2 + EDGE_GAP) };
+    };
+
+    const bottomOf = (id) => {
+      const p = pos.get(id);
+      return { x: p.x, y: p.y + (NODE_H / 2 + EDGE_GAP) };
+    };
+
+    // 1) TREE arrows (BLACK) with sibling offsets so they don't overlap
+    for (let li = 2; li < layers.length; li++) {
+      for (const parent of layers[li]) {
+        const kids = parent.children || [];
+        kids.forEach((kidId, k) => {
+          const a = topOf(kidId);
+          const b = bottomOf(parent.id);
+
+          // spread multiple incoming edges around parent
+          const off = (kids.length === 1) ? 0 : (k === 0 ? -7 : +7);
+          drawArrowOffset(a.x, a.y, b.x, b.y, '#111111', 3, off);
+        });
+      }
+    }
+
+    // 2) mobile -> fixed arrows: red to i, green to i+1 (offset so they don't overlap)
+    for (let i = 0; i < M; i++) {
+      const mId = `MN${i}`;
+      const redFixedIdx = 2 * i;       // 0,2,4,6  => FN1,FN3,FN5,FN7 (labels are +1)
+      const greenFixedIdx = 2 * i + 1; // 1,3,5,7  => FN2,FN4,FN6,FN8
+
+      if (redFixedIdx < F) {
+        const a = topOf(mId);
+        const b = bottomOf(`FN${redFixedIdx}`);
+        drawArrowOffset(a.x, a.y, b.x, b.y, '#ff2b2b', 3, -8);
+      }
+      if (greenFixedIdx < F) {
+        const a = topOf(mId);
+        const b = bottomOf(`FN${greenFixedIdx}`);
+        drawArrowOffset(a.x, a.y, b.x, b.y, '#17b34a', 3, +8);
+      }
+    }
+
+    // 3) draw nodes on top (mobile orange, fixed blue, internal black)
+    for (const L of layers) {
+      for (const n of L) {
+        const p = pos.get(n.id);
+        const stroke =
+          (n.kind === 'mobile') ? '#ff8a00' :
+          (n.kind === 'fixed')  ? '#243cff' :
+                                  '#111111';
+        drawRectNode(ctx, p.x, p.y, n.label, { stroke });
+      }
+    }
   });
 }
 
