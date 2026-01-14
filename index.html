@@ -85,7 +85,7 @@
 
     .panelHeader {
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:space-between;
       gap:10px;
       margin-bottom: 8px;
@@ -109,12 +109,99 @@
 
     /* snapshots panel sizing */
     #snapshotsPanel{
-      width: 520px;
+      width: 800px;
     }
     #snapshotsBox{
-      max-height: calc(100vh - 380px);
+      max-height: calc(100vh - 220px);
       overflow:auto;
       padding-right: 6px;
+    }
+
+    .shotImgsRow{
+      display: flex;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    /* each graph fills half */
+    .shotImgsRow .shotImg{
+      flex: 1 1 50%;
+      width: 50%;
+      max-width: 50%;
+      border-radius: 8px;
+      background: white; /* 🔑 ensures same look */
+    }
+
+    /* One snapshot row holding 2 tiles */
+.shotRow{
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+/* Each graph becomes its own white tile */
+.shotTile{
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.08);
+}
+
+/* Image inside tile */
+.shotTile .shotImg{
+  width: 100%;
+  display: block;
+  border-radius: 10px;
+  border: 1px dashed rgba(0,0,0,0.20);
+  background: white;
+}
+
+/* Tile header */
+.shotTileTitle{
+  font-weight: 900;
+  font-size: 12px;
+  margin-bottom: 6px;
+  padding-right: 30px; /* space for X */
+}
+
+/* Per-tile delete X */
+.shotTileDel{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  line-height: 1;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.14);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.10);
+  cursor: pointer;
+}
+.shotTileDel:hover{
+  background: rgba(255,255,255,0.98);
+  border-color: rgba(0,0,0,0.22);
+  transform: translateY(-1px);
+}
+
+/* stack on narrow widths */
+@media (max-width: 760px){
+  .shotRow{ flex-direction: column; }
+}
+
+
+    /* Optional: stack on small screens */
+    @media (max-width: 560px){
+      .shotImgsRow{ flex-direction: column; }
     }
 
     /* Graph box (inside Snapshots panel bottom) */
@@ -125,6 +212,18 @@
       background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
       overflow: hidden;
     }
+
+    /* Deployment latency graph box */
+    #deployGraphBox{
+      height: 250px;
+      border-radius: 8px;
+      border: 1px dashed rgba(0,0,0,0.25);
+      background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.00));
+      overflow: hidden;
+    }
+
+    /* NEW: live graphs wrapper (hidden when stopped) */
+    #liveGraphsSection.hidden { display:none; }
 
     /* Form rows */
     .fieldRow {
@@ -239,7 +338,7 @@
       font-size:12px;
       margin-bottom:6px;
       line-height:1.2;
-      padding-right: 26px; /* room for X */
+      padding-right: 26px;
     }
     .shotMeta{
       font-size:11px;
@@ -298,14 +397,13 @@
 
     /* ---------------------------------------------------
        SPLIT LAYOUT (when map is OFF)
-       - panes start BELOW control panel using --hudTopInset
     --------------------------------------------------- */
     body.splitMode #topologyHUD,
     body.splitMode #snapshotsHUD{
       position: fixed;
       top: var(--hudTopInset);
       bottom: 10px;
-      z-index: 9; /* below setupHUD so control panel never gets covered */
+      z-index: 9;
     }
 
     body.splitMode #snapshotsHUD{
@@ -344,17 +442,9 @@
       height: 320px;
     }
 
-    body.splitMode.soloTopo #topologyHUD{
-      left: 10px;
-      width: calc(100vw - 20px);
+    body.splitMode #deployGraphBox{
+      height: 280px;
     }
-    body.splitMode.soloTopo #snapshotsHUD{ display:none !important; }
-
-    body.splitMode.soloShots #snapshotsHUD{
-      right: 10px;
-      width: calc(100vw - 20px);
-    }
-    body.splitMode.soloShots #topologyHUD{ display:none !important; }
 
     /* ---------------------------------------------------
        NO OVERLAP (map ON + topo+shots ON)
@@ -387,7 +477,7 @@
 
 <div id="setupHUD">
   <div class="panel" id="setupPanel">
-    <div class="panelHeader">
+    <div class="panelHeader" style="align-items:center;">
       <div class="panelTitle">Control panel</div>
       <button id="hideControlBtn" type="button" title="Hide panel">Hide</button>
     </div>
@@ -455,7 +545,7 @@
 
 <div id="topologyHUD" style="display:none;">
   <div class="panel" id="topologyPanel">
-    <div class="panelHeader">
+    <div class="panelHeader" style="align-items:center;">
       <div class="panelTitle">Topology graph</div>
     </div>
     <div id="topologyBox">
@@ -466,26 +556,46 @@
 
 <div id="snapshotsHUD" style="display:none;">
   <div class="panel" id="snapshotsPanel">
-    <div class="panelHeader">
-      <div class="panelTitle">Snapshots</div>
-      <div class="small" id="graphTitle" style="text-align:right;">—</div>
-    </div>
 
-    <div class="small" style="opacity:0.8;">
-      Saved runs appear here after you press <b>Stop</b>.
+    <!-- UPDATED HEADER: config on top, run state on right -->
+    <div class="panelHeader">
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <div class="small" id="configTitle" style="opacity:0.85;">—</div>
+        <div class="panelTitle">Snapshots</div>
+      </div>
+      <div class="small" id="runStateTitle" style="text-align:right; opacity:0.75;">idle</div>
     </div>
 
     <div id="snapshotsBox"></div>
 
-    <div class="hr"></div>
+    <!-- WRAP BOTH GRAPHS so we can hide on stop -->
+    <div id="liveGraphsSection">
+      <div class="hr"></div>
 
-    <div class="small" style="opacity:0.75; margin-bottom:8px;">
-      Live latency graph (captured into snapshots on Stop)
+      <div class="small" style="opacity:0.75; margin-bottom:8px;">
+        Live latency graph (captured into snapshots on Stop)
+      </div>
+
+      <div id="graphBox">
+        <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="panelHeader" style="margin-bottom:6px; align-items:center;">
+        <div class="panelTitle">Deployment latency</div>
+        <div class="small" id="deployGraphTitle" style="text-align:right;">—</div>
+      </div>
+
+      <div class="small" style="opacity:0.75; margin-bottom:8px;">
+        Static (placeholder) — captured into snapshots on Stop
+      </div>
+
+      <div id="deployGraphBox">
+        <canvas id="deployCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
+      </div>
     </div>
 
-    <div id="graphBox">
-      <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
-    </div>
   </div>
 </div>
 
@@ -549,8 +659,7 @@ document.getElementById('container').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = null;
 
-// NEW: overlay group is in WORLD space (not parented to the city model),
-// so "lines" stay perfectly vertical regardless of model transforms.
+// overlay group in WORLD space
 const overlayGroup = new THREE.Group();
 scene.add(overlayGroup);
 
@@ -590,7 +699,6 @@ const queryModeEl = document.getElementById('queryMode');
 const applyConfigBtn = document.getElementById('applyConfigBtn');
 const stopBtn = document.getElementById('stopBtn');
 const resetViewBtn = document.getElementById('resetViewBtn');
-const graphTitleEl = document.getElementById('graphTitle');
 
 const topologyHUDEl = document.getElementById('topologyHUD');
 const snapshotsHUDEl = document.getElementById('snapshotsHUD');
@@ -603,6 +711,15 @@ const scenarioTopoBtn  = document.getElementById('scenarioTopo');
 const scenarioShotsBtn = document.getElementById('scenarioShots');
 
 const snapshotsBoxEl = document.getElementById('snapshotsBox');
+
+const deployTitleEl = document.getElementById('deployGraphTitle');
+const deployCanvas = document.getElementById('deployCanvas');
+const dctx = deployCanvas?.getContext('2d');
+
+/* NEW header bits */
+const configTitleEl = document.getElementById('configTitle');
+const runStateTitleEl = document.getElementById('runStateTitle');
+const liveGraphsSectionEl = document.getElementById('liveGraphsSection');
 
 function msToLabel(ms){
   if (ms >= 1000) return `${(ms/1000)}s`;
@@ -665,8 +782,6 @@ function clampEven(v, min, max){
 
 // total nodes: even only
 fillSelectRangeEven(totalNodesEl, 2, 16);
-
-// NEW: Default number of nodes = 8
 totalNodesEl.value = '8';
 
 function rebuildMobileOptionsPreserveSelection(){
@@ -678,8 +793,6 @@ function rebuildMobileOptionsPreserveSelection(){
   mobileNodesEl.value = String(clamped);
 }
 rebuildMobileOptionsPreserveSelection();
-
-// Default mobile nodes = 4
 mobileNodesEl.value = '4';
 
 cameraModeEl.value = '1000';
@@ -694,21 +807,47 @@ let activeConfig = {
   queryMode: 'stateful'
 };
 
-function setGraphTitleFromActive(extra = ''){
+/* NEW: config title (above snapshots) */
+function setConfigTitleFromActive(){
   const c = activeConfig;
   const fixed = Math.max(0, c.totalNodes - c.mobileNodes);
   const base =
     `${c.mobileNodes} mobile / ${fixed} fixed (${c.totalNodes} total) / ` +
     `${msToLabel(c.topoChangeMs)} / ${c.reconfigMode} / ${c.queryMode}`;
-  graphTitleEl.textContent = extra ? `${base} — ${extra}` : base;
+  if (configTitleEl) configTitleEl.textContent = base;
 }
-setGraphTitleFromActive('idle');
+
+/* NEW: run state title (right side) */
+function setRunStateLabel(text){
+  if (runStateTitleEl) runStateTitleEl.textContent = text;
+}
+
+/* keep deploy title as configuration line */
+function setDeployTitleFromActive(){
+  const c = activeConfig;
+  const fixed = Math.max(0, c.totalNodes - c.mobileNodes);
+  const base =
+    `${c.mobileNodes} mobile / ${fixed} fixed (${c.totalNodes} total) / ` +
+    `${msToLabel(c.topoChangeMs)} / ${c.reconfigMode} / ${c.queryMode}`;
+  if (deployTitleEl) deployTitleEl.textContent = base;
+}
+
+function setLiveGraphsVisible(visible){
+  if (!liveGraphsSectionEl) return;
+  liveGraphsSectionEl.classList.toggle('hidden', !visible);
+}
+
+setConfigTitleFromActive();
+setDeployTitleFromActive();
+setRunStateLabel('idle');
 
 totalNodesEl.addEventListener('change', () => {
   const total = clampEven(parseInt(totalNodesEl.value, 10) || 8, 2, 16);
   totalNodesEl.value = String(total);
   rebuildMobileOptionsPreserveSelection();
   updateHudTopInset();
+  setConfigTitleFromActive();
+  setDeployTitleFromActive();
 });
 
 mobileNodesEl.addEventListener('change', () => {
@@ -717,6 +856,8 @@ mobileNodesEl.addEventListener('change', () => {
   const m = clampEven(parseInt(mobileNodesEl.value, 10) || 4, 2, maxMobile);
   mobileNodesEl.value = String(m);
   updateHudTopInset();
+  setConfigTitleFromActive();
+  setDeployTitleFromActive();
 });
 
 // -----------------------------------------------------
@@ -839,40 +980,26 @@ if (speedEl) {
 // -----------------------------------------------------
 const EDGE = {
   centers: [],
-
-  // uniform visuals
   height: 650,
   radius: 10,
-
-  // distance from path (ground plane) - increase to push farther away
-  lateralOffset: 320,     // <-- was 220 (this is the main "farther from path" knob)
-
-  // optional: push a bit forward/back along the path direction (ground plane)
-  alongOffset: 90,        // <-- keeps them away from the track area
-
-  // where the arrow ends on the node:
-  // 0.0 = road surface (anchor), 1.0 = column center, in-between = in-between
-  arrowTargetMix: 0.75,   // <-- "half of the center and the road" (tweak 0.35..0.75)
-  arrowEndLift: 120, // absolute world-space lift (THIS fixes occlusion)
-  // how much the arrow stops before the cylinder surface
-  arrowStopGap: 70,       // <-- increase = stops earlier; decrease = gets closer
+  lateralOffset: 320,
+  alongOffset: 90,
+  arrowTargetMix: 0.75,
+  arrowEndLift: 120,
+  arrowStopGap: 70,
 };
-
 
 const trainConnections = []; // per train: { arrowGroup, shaft, head }
 
 function makeOrangeArrow() {
   const g = new THREE.Group();
-
   const mat = new THREE.MeshBasicMaterial({ color: 0xff8a00, transparent: true, opacity: 1.0 });
 
-  // shaft thicker
   const shaftGeom = new THREE.CylinderGeometry(4.6, 4.6, 1, 10, 1, false);
   const shaft = new THREE.Mesh(shaftGeom, mat);
   shaft.position.y = 0.5;
   g.add(shaft);
 
-  // head bigger + more visible
   const headGeom = new THREE.ConeGeometry(16, 44, 14, 1, false);
   const head = new THREE.Mesh(headGeom, mat);
   head.position.y = 1;
@@ -893,9 +1020,8 @@ const _tmpA = new THREE.Vector3();
 const _tmpB = new THREE.Vector3();
 const _tmpDir = new THREE.Vector3();
 const _tmpQuat = new THREE.Quaternion();
-const _tmpMat4 = new THREE.Matrix4();
 const columnRaycaster = new THREE.Raycaster();
-const MAP_UP_LOCAL = new THREE.Vector3(0, 0, 1); // Berlin map "up" in model space
+const MAP_UP_LOCAL = new THREE.Vector3(0, 0, 1);
 const _tmpWorldUp = new THREE.Vector3();
 const _tmpW = new THREE.Vector3();
 const _tmpLocal = new THREE.Vector3();
@@ -916,7 +1042,6 @@ function clearTrainArrows(){
     c?.shaft?.geometry?.dispose?.();
     c?.head?.geometry?.dispose?.();
     c?.shaft?.material?.dispose?.();
-    // head shares same material instance; dispose once is fine in this simple setup
   }
   trainConnections.length = 0;
 }
@@ -936,52 +1061,34 @@ function buildEdgeCenters(count){
     opacity: 0.95,
   });
 
-  const geom = new THREE.CylinderGeometry(
-    EDGE.radius,
-    EDGE.radius,
-    EDGE.height,
-    10,
-    1,
-    false
-  );
-
-  // Cylinder axis = local Z (map-up)
+  const geom = new THREE.CylinderGeometry(EDGE.radius, EDGE.radius, EDGE.height, 10, 1, false);
   geom.rotateX(Math.PI / 2);
 
   const tan = new THREE.Vector3();
   const right = new THREE.Vector3();
 
-  // world-space "up" for raycasting = local MAP_UP transformed by rootRef
   rootRef.getWorldQuaternion(_tmpQ);
   _tmpWorldUp.copy(MAP_UP_LOCAL).applyQuaternion(_tmpQ).normalize();
 
   for (let i = 0; i < count; i++){
     const u = (i + 0.5) / count;
 
-    // model-local point on the path
     pathCurve.getPointAt(u, _tmpA);
-
-    // tangent in model-local space
     pathCurve.getTangentAt(u, tan).normalize();
 
-    // right direction in model-local ground plane
     right.copy(MAP_UP_LOCAL).cross(tan);
     if (right.lengthSq() < 1e-10) right.set(1, 0, 0);
     right.normalize();
 
     const side = (i % 2 === 0) ? 1 : -1;
 
-    // move farther away from path (ground plane)
     _tmpA.addScaledVector(right, EDGE.lateralOffset * side);
-
-    // optional: move a bit along path (ground plane) so they don't sit too close to track
     _tmpA.addScaledVector(tan, EDGE.alongOffset * side);
 
-    // --- Raycast to snap to map surface (consistent anchoring) ---
     _tmpW.copy(_tmpA);
-    rootRef.localToWorld(_tmpW);                 // world position of desired node spot
+    rootRef.localToWorld(_tmpW);
 
-    const rayOrigin = _tmpW.clone().addScaledVector(_tmpWorldUp, 2500); // above map
+    const rayOrigin = _tmpW.clone().addScaledVector(_tmpWorldUp, 2500);
     const rayDir = _tmpWorldUp.clone().multiplyScalar(-1);
 
     columnRaycaster.set(rayOrigin, rayDir);
@@ -990,7 +1097,6 @@ function buildEdgeCenters(count){
     let anchorWorld = _tmpW.clone();
     if (hits.length) anchorWorld.copy(hits[0].point);
 
-    // place cylinder in model space at anchor (so it goes through map evenly)
     _tmpLocal.copy(anchorWorld);
     rootRef.worldToLocal(_tmpLocal);
 
@@ -998,12 +1104,10 @@ function buildEdgeCenters(count){
     m.position.copy(_tmpLocal);
     m.renderOrder = 5;
     m.visible = false;
-
-    // store anchor in WORLD for arrow targeting
     m.userData.anchorWorld = anchorWorld.clone();
 
     EDGE.centers.push(m);
-    rootRef.add(m); // ✅ important: nodes live in model space
+    rootRef.add(m);
   }
 }
 
@@ -1026,18 +1130,15 @@ function updateConnections(){
     const train = trains[i];
     if (!c || !train) continue;
 
-    // train world start
     train.getWorldPosition(_tmpA);
     _tmpA.z += 30;
 
-    // find nearest node using anchorWorld (stable near the ground)
     let bestIdx = 0;
     let bestD2 = Infinity;
 
     for (let j = 0; j < EDGE.centers.length; j++){
       const e = EDGE.centers[j];
       if (!e) continue;
-
       const aw = e.userData.anchorWorld;
       if (!aw) continue;
 
@@ -1051,29 +1152,24 @@ function updateConnections(){
     const anchorWorld = edge.userData.anchorWorld;
     if (!anchorWorld) continue;
 
-    // center of cylinder in WORLD
-    edge.getWorldPosition(_tmpB); // _tmpB = centerWorld
+    edge.getWorldPosition(_tmpB);
 
-    // target between road(anchor) and center
-    const mix = EDGE.arrowTargetMix; // 0..1
-    _tmpB.lerpVectors(anchorWorld, _tmpB, mix); // _tmpB becomes targetWorld
+    const mix = EDGE.arrowTargetMix;
+    _tmpB.lerpVectors(anchorWorld, _tmpB, mix);
     _tmpB.addScaledVector(_tmpWorldUp, EDGE.arrowEndLift);
 
-    // direction to target
     _tmpDir.copy(_tmpB).sub(_tmpA);
     const fullLen = _tmpDir.length();
     if (fullLen < 1e-6) continue;
     _tmpDir.multiplyScalar(1 / fullLen);
 
-    // rotate arrow so +Y points to target
     _tmpQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _tmpDir);
 
     const arrow = c.arrowGroup;
     arrow.position.copy(_tmpA);
     arrow.quaternion.copy(_tmpQuat);
 
-    // stop before cylinder surface
-    const stopGap = EDGE.arrowStopGap;     // <-- tweak this
+    const stopGap = EDGE.arrowStopGap;
     const headLen = c.headLen ?? 44;
 
     const usable = Math.max(40, fullLen - stopGap);
@@ -1084,7 +1180,6 @@ function updateConnections(){
 
     c.head.position.y = shaftLen + headLen * 0.5;
 
-    // cap absurd lengths
     const maxLen = 2600;
     if (usable > maxLen) {
       const k = maxLen / usable;
@@ -1132,15 +1227,12 @@ function applyScenarioLayout(){
 
   const split = !mapOn && (topoOn || shotsOn);
   document.body.classList.toggle('splitMode', split);
-  document.body.classList.toggle('soloTopo', split && topoOn && !shotsOn);
-  document.body.classList.toggle('soloShots', split && shotsOn && !topoOn);
+  document.body.classList.remove('soloTopo', 'soloShots');
 
-  if (shotsOn) renderGraph();
+  if (shotsOn) { renderGraph(); renderDeployGraph(); }
   if (topoOn) renderTopology();
 
-  // toggle overlay visibility with map
   setMapOverlayVisible(mapOn);
-
   updateHudTopInset();
 }
 
@@ -1152,7 +1244,7 @@ scenario.map = true;
 applyScenarioLayout();
 
 // -----------------------------------------------------
-// GRAPH (latency)
+// GRAPH (event-time latency)
 // -----------------------------------------------------
 const graphCanvas = document.getElementById('graphCanvas');
 const gctx = graphCanvas?.getContext('2d');
@@ -1343,6 +1435,226 @@ function renderGraph(){
 }
 
 // -----------------------------------------------------
+// DEPLOYMENT LATENCY (static stacked single column)
+// -----------------------------------------------------
+function resizeDeployCanvasToCSS() {
+  if (!deployCanvas) return;
+  const rect = deployCanvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  deployCanvas.width  = Math.max(1, Math.floor(rect.width  * dpr));
+  deployCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+
+  if (dctx) dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawDeploymentLatencyStatic(){
+  if (!dctx || !deployCanvas) return;
+
+  const ctx = dctx;
+  const rect = deployCanvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+
+  // static placeholder values
+  const DEPLOY = 6.1;
+  const OPT_TOTAL = 12.0; // overall top
+  const GREEN = '#66c56b';
+
+  const Y_MIN2 = 1;
+  const Y_MAX2 = 1e3;
+  const LOG_MIN2 = Math.log10(Y_MIN2);
+  const LOG_MAX2 = Math.log10(Y_MAX2);
+
+  const pad = { l: 56, r: 14, t: 14, b: 36 };
+  const x0 = pad.l;
+  const y0 = pad.t;
+  const x1 = w - pad.r;
+  const y1 = h - pad.b;
+
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.02)';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+  // axes
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x0, y1);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+
+  const yAt = (v) => {
+    const lv = Math.log10(Math.max(v, Y_MIN2));
+    const t = (lv - LOG_MIN2) / (LOG_MAX2 - LOG_MIN2);
+    return y0 + (1 - t) * (y1 - y0);
+  };
+
+  const SUPER2 = { 0: '⁰', 1: '¹', 2: '²', 3: '³' };
+  ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  [1, 10, 100, 1000].forEach(v => {
+    const y = yAt(v);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x1, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 5, y);
+    ctx.lineTo(x0, y);
+    ctx.stroke();
+
+    const expn = Math.round(Math.log10(v));
+    ctx.fillText(`10${SUPER2[expn] ?? ''}`, x0 - 8, y);
+  });
+
+  // x single tick “2”
+  const cx = (x0 + x1) / 2;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillText('2', cx, y1 + 8);
+
+  // single column geometry
+  const barW = Math.min(86, Math.max(58, (x1 - x0) * 0.20));
+  const bx0 = cx - barW / 2;
+
+  const yBase = yAt(1);
+  const yDeploy = yAt(DEPLOY);
+  const yTop = yAt(OPT_TOTAL);
+
+  // bottom: Deployment (solid)
+  ctx.save();
+  ctx.fillStyle = GREEN;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.lineWidth = 3;
+
+  ctx.beginPath();
+  ctx.rect(bx0, yDeploy, barW, yBase - yDeploy);
+  ctx.fill();
+  ctx.stroke();
+
+  // top: Optimization (hatched)
+  ctx.beginPath();
+  ctx.rect(bx0, yTop, barW, yDeploy - yTop);
+  ctx.fillStyle = GREEN;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx0, yTop, barW, yDeploy - yTop);
+  ctx.clip();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.lineWidth = 2;
+  const step = 10;
+  for (let x = bx0 - (yBase); x < bx0 + barW + (yBase); x += step) {
+    ctx.beginPath();
+    ctx.moveTo(x, yBase);
+    ctx.lineTo(x + (yBase - y0), y0);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // white vertical number in deployment segment (smaller)
+  function verticalLabel(text, yMid){
+    ctx.save();
+    ctx.translate(cx, yMid);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = '900 22px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+  verticalLabel('6.1', (yBase + yDeploy) / 2);
+
+  // blue number above (smaller)
+  ctx.save();
+  ctx.font = '900 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillStyle = '#123cff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('12', cx, yTop - 6);
+  ctx.restore();
+
+  // y axis label (deployment-latency)
+  ctx.save();
+  ctx.translate(18, (y0 + y1) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.70)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('deployment-latency (s)', 0, 0);
+  ctx.restore();
+
+  // legend (top-right)
+  const lx = x1 - 140;
+  const ly = y0 + 8;
+
+  function legendItem(y, label, hatched){
+    const sw = 34, sh = 18;
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillStyle = GREEN;
+    ctx.beginPath();
+    ctx.rect(lx, y, sw, sh);
+    ctx.fill();
+    ctx.stroke();
+
+    if (hatched) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(lx, y, sw, sh);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 2;
+      for (let x = lx - 20; x < lx + sw + 20; x += 8) {
+        ctx.beginPath();
+        ctx.moveTo(x, y + sh);
+        ctx.lineTo(x + sh + 20, y - 20);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    ctx.font = '800 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx + sw + 10, y + sh / 2);
+    ctx.restore();
+  }
+
+  legendItem(ly, 'Optimization', true);
+  legendItem(ly + 26, 'Deployment', false);
+
+  ctx.restore();
+}
+
+function renderDeployGraph(){
+  resizeDeployCanvasToCSS();
+  drawDeploymentLatencyStatic();
+}
+
+// -----------------------------------------------------
 // TOPOLOGY GRAPH (placeholder)
 // -----------------------------------------------------
 const topoCanvas = document.getElementById('topologyCanvas');
@@ -1461,7 +1773,6 @@ function drawTopologyPlaceholder() {
     drawArrow(ctx, x1 + nx * offsetPx, y1 + ny * offsetPx, x2 + nx * offsetPx, y2 + ny * offsetPx, color, w);
   }
 
-  // Design space (match your wide graph)
   const DW = 860;
   const DH = 420;
 
@@ -1476,7 +1787,6 @@ function drawTopologyPlaceholder() {
 
     const layers = [mobile, fixed];
 
-    // internal layers from fixed upwards (pair 2->1)
     let prev = fixed.map(n => ({ ...n }));
     let level = 0;
     while (prev.length > 1) {
@@ -1497,10 +1807,9 @@ function drawTopologyPlaceholder() {
       level++;
     }
 
-    const baseY = DH - 50; // bottom padding
+    const baseY = DH - 50;
     const pos = new Map();
 
-    // spacing uses widest layer (usually fixed)
     const maxCount = Math.max(1, ...layers.map(L => L.length || 1));
     const spacing = Math.min(130, Math.max(78, (DW - 120) / Math.max(1, (maxCount - 1))));
 
@@ -1510,24 +1819,21 @@ function drawTopologyPlaceholder() {
       return Array.from({ length: count }, (_, i) => start + i * spacing);
     }
 
-    // 1) place FIXED first (so mobiles can align under them)
     {
       const y = baseY - 1 * (nodeH + yGap);
       const xs = layerXs(fixed.length);
       for (let i = 0; i < fixed.length; i++) pos.set(fixed[i].id, { x: xs[i], y });
     }
 
-    // 2) place MOBILE aligned under FN0..FN(M-1) (reduces diagonal overlap)
     {
       const y = baseY - 0 * (nodeH + yGap);
       for (let i = 0; i < mobile.length; i++) {
-        const fnPos = pos.get(`FN${i}`);               // align to ith fixed
+        const fnPos = pos.get(`FN${i}`);
         const x = fnPos ? fnPos.x : (cx + (i - (mobile.length-1)/2) * spacing);
         pos.set(mobile[i].id, { x, y });
       }
     }
 
-    // 3) place INTERNAL layers above (centered normally)
     for (let li = 2; li < layers.length; li++) {
       const L = layers[li];
       const y = baseY - li * (nodeH + yGap);
@@ -1538,20 +1844,15 @@ function drawTopologyPlaceholder() {
     for (let i = 0; i < M; i++) {
       const fnA = pos.get(`FN${2 * i}`);
       const fnB = pos.get(`FN${2 * i + 1}`);
-
       if (!fnA || !fnB) continue;
 
       const mn = pos.get(`MN${i}`);
       if (!mn) continue;
 
-      // center MN horizontally between its two fixed nodes
       mn.x = (fnA.x + fnB.x) * 0.5;
     }
 
-    const NODE_W = 74;
     const NODE_H = 34;
-
-    // keep arrow head from touching the rectangle border
     const EDGE_GAP = 8;
 
     const topOf = (id) => {
@@ -1564,26 +1865,22 @@ function drawTopologyPlaceholder() {
       return { x: p.x, y: p.y + (NODE_H / 2 + EDGE_GAP) };
     };
 
-    // 1) TREE arrows (BLACK) with sibling offsets so they don't overlap
     for (let li = 2; li < layers.length; li++) {
       for (const parent of layers[li]) {
         const kids = parent.children || [];
         kids.forEach((kidId, k) => {
           const a = topOf(kidId);
           const b = bottomOf(parent.id);
-
-          // spread multiple incoming edges around parent
           const off = (kids.length === 1) ? 0 : (k === 0 ? -7 : +7);
           drawArrowOffset(a.x, a.y, b.x, b.y, '#111111', 3, off);
         });
       }
     }
 
-    // 2) mobile -> fixed arrows: red to i, green to i+1 (offset so they don't overlap)
     for (let i = 0; i < M; i++) {
       const mId = `MN${i}`;
-      const redFixedIdx = 2 * i;       // 0,2,4,6  => FN1,FN3,FN5,FN7 (labels are +1)
-      const greenFixedIdx = 2 * i + 1; // 1,3,5,7  => FN2,FN4,FN6,FN8
+      const redFixedIdx = 2 * i;
+      const greenFixedIdx = 2 * i + 1;
 
       if (redFixedIdx < F) {
         const a = topOf(mId);
@@ -1597,7 +1894,6 @@ function drawTopologyPlaceholder() {
       }
     }
 
-    // 3) draw nodes on top (mobile orange, fixed blue, internal black)
     for (const L of layers) {
       for (const n of L) {
         const p = pos.get(n.id);
@@ -1619,7 +1915,8 @@ function renderTopology() {
 // -----------------------------------------------------
 // SNAPSHOTS LIST + delete
 // -----------------------------------------------------
-const snapshots = []; // { title, runtimeSec, dataUrl, when }
+const snapshots = []; 
+// each item: { kind: 'event'|'deploy', title, runtimeSec, dataUrl, when }
 
 function deleteSnapshotAt(index){
   if (index < 0 || index >= snapshots.length) return;
@@ -1641,47 +1938,68 @@ function renderSnapshotsList(){
     return;
   }
 
-  snapshots.forEach((s, idx) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'shot';
+  // render in pairs: [event, deploy]
+  for (let i = 0; i < snapshots.length; i += 2) {
+    const a = snapshots[i];
+    const b = snapshots[i + 1];
 
-    const del = document.createElement('button');
-    del.className = 'shotDel';
-    del.type = 'button';
-    del.title = 'Delete snapshot';
-    del.textContent = '×';
-    del.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      deleteSnapshotAt(idx);
-      updateHudTopInset();
-    });
+    const row = document.createElement('div');
+    row.className = 'shotRow';
 
-    const t = document.createElement('div');
-    t.className = 'shotTitle';
-    t.textContent = s.title;
+    function makeTile(snap, index){
+      if (!snap || !snap.dataUrl) return null;
 
-    const m = document.createElement('div');
-    m.className = 'shotMeta';
-    m.textContent = `Runtime: ${s.runtimeSec.toFixed(1)}s • ${s.when ?? ''}`;
+      const tile = document.createElement('div');
+      tile.className = 'shotTile';
 
-    const img = document.createElement('img');
-    img.className = 'shotImg';
-    img.src = s.dataUrl;
-    img.alt = s.title;
+      const del = document.createElement('button');
+      del.className = 'shotTileDel';
+      del.type = 'button';
+      del.title = 'Delete this graph';
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteSnapshotAt(index);
+        updateHudTopInset();
+      });
 
-    wrap.appendChild(del);
-    wrap.appendChild(t);
-    wrap.appendChild(m);
-    wrap.appendChild(img);
+      const t = document.createElement('div');
+      t.className = 'shotTileTitle';
+      t.textContent = `${snap.title} — ${snap.kind === 'event' ? 'Event-time' : 'Deployment'}`;
 
-    snapshotsBoxEl.appendChild(wrap);
-  });
+      const m = document.createElement('div');
+      m.className = 'shotMeta';
+
+      const img = document.createElement('img');
+      img.className = 'shotImg';
+      img.src = snap.dataUrl;
+      img.alt = t.textContent;
+
+      tile.appendChild(del);
+      tile.appendChild(t);
+      tile.appendChild(m);
+      tile.appendChild(img);
+
+      return tile;
+    }
+
+    const tileA = makeTile(a, i);
+    const tileB = makeTile(b, i + 1);
+
+    if (tileA) row.appendChild(tileA);
+    if (tileB) row.appendChild(tileB);
+
+    snapshotsBoxEl.appendChild(row);
+  }
 }
+
 renderSnapshotsList();
 
 function addSnapshot(){
+  // ensure both canvases are current before capturing
   renderGraph();
+  renderDeployGraph();
 
   const c = activeConfig;
   const fixed = Math.max(0, c.totalNodes - c.mobileNodes);
@@ -1691,13 +2009,20 @@ function addSnapshot(){
 
   const runtimeSec = (exp.stopMs && exp.startMs) ? ((exp.stopMs - exp.startMs) / 1000) : 0;
   const dataUrl = graphCanvas.toDataURL('image/png');
+  const deployUrl = deployCanvas ? deployCanvas.toDataURL('image/png') : null;
 
-  snapshots.unshift({
+snapshots.unshift(
+  {
+    kind: 'event',
     title,
-    runtimeSec,
-    dataUrl,
-    when: new Date().toLocaleString()
-  });
+    dataUrl: graphCanvas.toDataURL('image/png')
+  },
+  {
+    kind: 'deploy',
+    title,
+    dataUrl: deployCanvas ? deployCanvas.toDataURL('image/png') : null
+  }
+);
 
   renderSnapshotsList();
   updateHudTopInset();
@@ -1734,12 +2059,19 @@ function startExperiment(){
     queryMode: queryModeEl.value
   };
 
+  setConfigTitleFromActive();
+  setDeployTitleFromActive();
+
+  // show graphs when starting
+  setLiveGraphsVisible(true);
+  setRunStateLabel('running');
+
   // trains match mobile nodes
   settings.trainCount = activeConfig.mobileNodes;
   syncUI();
   ensureTrainCount(settings.trainCount);
 
-  // NEW: edge centers reflect TOTAL nodes (so 8 nodes => 8 columns)
+  // edge centers reflect TOTAL nodes
   const edgeCount = Math.max(2, activeConfig.totalNodes);
   buildEdgeCenters(edgeCount);
   initTrainConnections();
@@ -1753,7 +2085,6 @@ function startExperiment(){
   exp.lastTopoEventMs = exp.startMs;
   exp.stopMs = exp.startMs;
 
-  setGraphTitleFromActive('running');
   stopBtn.disabled = false;
   applyConfigBtn.textContent = 'Apply (Restart)';
 
@@ -1808,10 +2139,15 @@ function startExperiment(){
 
     if (scenario.shots) renderGraph();
   }, 10);
+
+  if (scenario.shots) { renderGraph(); renderDeployGraph(); }
 }
 
 function stopExperiment(){
   if (!exp.running) return;
+
+  // ensure we capture before hiding
+  if (scenario.shots) { renderGraph(); renderDeployGraph(); }
 
   exp.running = false;
   exp.stopMs = nowMs();
@@ -1822,11 +2158,14 @@ function stopExperiment(){
   exp.scrollAfterStop = false;
   settings.speedActive = 0;
 
-  setGraphTitleFromActive(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
-  if (scenario.shots) renderGraph();
-
   stopBtn.disabled = true;
+
+  // snapshot first
   addSnapshot();
+
+  // hide graphs after stopping (only snapshots remain)
+  setLiveGraphsVisible(false);
+  setRunStateLabel(`stopped @ ${((exp.stopMs - exp.startMs)/1000).toFixed(1)}s`);
 }
 
 applyConfigBtn.addEventListener('click', startExperiment);
@@ -1870,9 +2209,15 @@ function resetRunAndTrainsToStart(){
 
   stopBtn.disabled = true;
   applyConfigBtn.textContent = 'Apply (Start)';
-  setGraphTitleFromActive('idle');
 
-  if (scenario.shots) renderGraph();
+  setConfigTitleFromActive();
+  setDeployTitleFromActive();
+  setRunStateLabel('idle');
+
+  // show graphs again on reset
+  setLiveGraphsVisible(true);
+
+  if (scenario.shots) { renderGraph(); renderDeployGraph(); }
 }
 
 resetViewBtn?.addEventListener('click', () => {
@@ -2147,7 +2492,6 @@ loader.load(MODEL_URL, (gltf) => {
   ensureTrainCount(settings.trainCount);
   for (let i=0;i<trainData.length;i++) trainData[i].u = i / Math.max(1, trainData.length);
 
-  // NEW: default centers reflect default total nodes (=8)
   const edgeCount = Math.max(2, activeConfig.totalNodes);
   buildEdgeCenters(edgeCount);
   initTrainConnections();
@@ -2203,7 +2547,6 @@ function animate() {
     }
   }
 
-  // NEW: always connect to nearest node; arrows are thick & black
   updateConnections();
 
   controls.update();
@@ -2219,12 +2562,14 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
   renderGraph();
+  renderDeployGraph();
   renderTopology();
   updateHudTopInset();
 });
 
 // initial canvas render
 renderGraph();
+renderDeployGraph();
 renderTopology();
 updateHudTopInset();
 </script>
