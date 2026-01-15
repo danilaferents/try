@@ -1328,10 +1328,22 @@ function drawGraph(points) {
   });
 
   const hasData = points.length >= 2;
-  const tNowSec = exp.startMs ? ((nowMs() - exp.startMs) / 1000) : 0;
+
+  // ✅ NEW: always know "stop runtime"
+  const tNowSec  = exp.startMs ? ((nowMs() - exp.startMs) / 1000) : 0;
+  const tStopSec = exp.startMs ? ((exp.stopMs - exp.startMs) / 1000) : 0;
   const tMaxData = hasData ? points[points.length - 1].tSec : 0;
-  const tMaxAxis = (exp.running || exp.scrollAfterStop) ? tNowSec : tMaxData;
-  const tMin = Math.max(0, tMaxAxis - 150);
+
+  // ✅ NEW: axis max
+  // - while running: show now
+  // - when stopped: show full experiment runtime (stop time)
+  const tMaxAxis = exp.running ? tNowSec : Math.max(tStopSec, tMaxData);
+
+  // ✅ NEW: axis min
+  // - holistic + stopped => show FULL x-axis (0..tMaxAxis)
+  // - otherwise keep rolling window
+  const isHolistic = activeConfig.reconfigMode === 'holistic';
+  const tMin = (!exp.running) ? 0 : Math.max(0, tMaxAxis - 150);
 
   const xAtT = (t) => {
     const tt = (t - tMin) / Math.max(1e-6, (tMaxAxis - tMin));
@@ -1379,35 +1391,61 @@ function drawGraph(points) {
     ctx.fillText(label, x, y1 + 8);
   }
 
-  if (points.length >= 2) {
-    const isHolistic = activeConfig.reconfigMode === 'holistic';
-
-    ctx.fillStyle = isHolistic
-      ? 'rgba(255, 138, 0, 0.80)'   // ORANGE for holistic
-      : 'rgba(115, 190, 110, 0.80)'; // GREEN for incremental
-    ctx.beginPath();
-
-    let started = false;
-    for (let i = 0; i < points.length; i++) {
-      const pt = points[i];
-      if (pt.tSec < tMin) continue;
-      const x = xAtT(pt.tSec);
-      const y = yAt(pt.v) - 16;
-      if (!started) { ctx.moveTo(x, y); started = true; }
-      else ctx.lineTo(x, y);
-    }
-
-    for (let i = points.length - 1; i >= 0; i--) {
-      const pt = points[i];
-      if (pt.tSec < tMin) continue;
-      const x = xAtT(pt.tSec);
-      const y = yAt(pt.v) + 16;
-      ctx.lineTo(x, y);
-    }
-
-    ctx.closePath();
-    ctx.fill();
+  function smoothV(i, win){
+  let s = 0, n = 0;
+  for (let k = -win; k <= win; k++){
+    const j = i + k;
+    if (j < 0 || j >= points.length) continue;
+    s += points[j].v;
+    n++;
   }
+  return n ? (s / n) : points[i].v;
+  }
+
+if (points.length >= 2) {
+  ctx.fillStyle = isHolistic
+    ? 'rgba(255, 138, 0, 0.80)'
+    : 'rgba(115, 190, 110, 0.80)';
+
+  // ✅ makes corners less sharp
+  ctx.lineJoin = 'round';
+  ctx.lineCap  = 'round';
+
+  const band = 16;
+  const win = isHolistic ? 2 : 4; // a bit more smoothing for incremental
+
+  ctx.beginPath();
+
+  let started = false;
+
+  // TOP edge
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i];
+    if (pt.tSec < tMin || pt.tSec > tMaxAxis) continue;
+
+    const x = xAtT(pt.tSec);
+    const v = smoothV(i, win);
+    const y = yAt(v) - band;
+
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+
+  // BOTTOM edge (reverse)
+  for (let i = points.length - 1; i >= 0; i--) {
+    const pt = points[i];
+    if (pt.tSec < tMin || pt.tSec > tMaxAxis) continue;
+
+    const x = xAtT(pt.tSec);
+    const v = smoothV(i, win);
+    const y = yAt(v) + band;
+
+    ctx.lineTo(x, y);
+  }
+
+  ctx.closePath();
+  ctx.fill();
+}
 
   ctx.fillStyle = 'rgba(0,0,0,0.70)';
   ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
@@ -1461,15 +1499,334 @@ function drawDeploymentLatencyStatic(){
   const w = rect.width;
   const h = rect.height;
 
-  // --- choose theme by reconfiguration mode ---
   const isHolistic = (activeConfig?.reconfigMode === 'holistic');
 
-  // Incremental: keep exactly as before
-  // Holistic: overall=20, optimization number=11, orange color
-  const DEPLOY = isHolistic ? 10.9 : 6.4; // bottom segment number stays 6.1 in both modes
-  const OPT_TOTAL = isHolistic ? 20.0 : 12.0;  // overall top
-  const OPT_LABEL = isHolistic ? '20' : '12';  // blue label above column
-  const BAR_COLOR = isHolistic ? '#ff8a00' : '#66c56b'; // orange vs green
+  // ==========================================================
+  // INCREMENTAL: UPDATED
+  // - Flip stack: TOP = Deployment (light green), BOTTOM = Optimization (dark green)
+  // - Optimization visually ~1/2 bar height
+  // - Add Applicator/Amender/Lock patterns in optimization + legend (pattern-only)
+  // - Keep "Optimization" then "Deployment" order in legend as before
+  // ==========================================================
+  if (!isHolistic) {
+    const DEPLOY = 6.4;
+    const OPT_TOTAL = 12.0;
+    const OPT_LABEL = '12';
+
+    const OPT_ONLY = Math.max(0.0001, OPT_TOTAL - DEPLOY);
+
+    // split of optimization using 6/10/4 proportions (scaled to OPT_ONLY)
+    const pSum = 6 + 10 + 4;
+    const optParts = {
+      applicator: OPT_ONLY * (6 / pSum),
+      amender:    OPT_ONLY * (10 / pSum),
+      lock:       OPT_ONLY * (4 / pSum),
+    };
+
+    // colors
+    const DEPLOY_COLOR = '#79d17c'; // light green
+    const OPT_COLOR    = '#1f8f3a'; // dark green
+
+    // axis range (same)
+    const Y_MIN2 = 1;
+    const Y_MAX2 = 1e3;
+    const LOG_MIN2 = Math.log10(Y_MIN2);
+    const LOG_MAX2 = Math.log10(Y_MAX2);
+
+    const pad = { l: 56, r: 14, t: 14, b: 36 };
+    const x0 = pad.l;
+    const y0 = pad.t;
+    const x1 = w - pad.r;
+    const y1 = h - pad.b;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.02)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+    // axes
+    ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0, y1);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+
+    const yAt = (v) => {
+      const lv = Math.log10(Math.max(v, Y_MIN2));
+      const t = (lv - LOG_MIN2) / (LOG_MAX2 - LOG_MIN2);
+      return y0 + (1 - t) * (y1 - y0);
+    };
+
+    const SUPER2 = { 0: '⁰', 1: '¹', 2: '²', 3: '³' };
+    ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    [1, 10, 100, 1000].forEach(v => {
+      const y = yAt(v);
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+      ctx.setLineDash([2, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(x0 - 5, y);
+      ctx.lineTo(x0, y);
+      ctx.stroke();
+
+      const expn = Math.round(Math.log10(v));
+      ctx.fillText(`10${SUPER2[expn] ?? ''}`, x0 - 8, y);
+    });
+
+    // x single tick “2”
+    const cx = (x0 + x1) / 2;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillText('2', cx, y1 + 8);
+
+    // single column geometry
+    const barW = Math.min(86, Math.max(58, (x1 - x0) * 0.20));
+    const bx0 = cx - barW / 2;
+
+    const OUTLINE = 'rgba(0,0,0,0.85)';
+    const OUTLINE_W = 3;
+
+    // ---- helpers ----
+    function withClipRect(x, y, ww, hh, fn){
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, ww, hh);
+      ctx.clip();
+      fn();
+      ctx.restore();
+    }
+
+    function patternDots(x, y, ww, hh){
+      withClipRect(x, y, ww, hh, () => {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        const step = 10;
+        for (let yy = y + 4; yy < y + hh; yy += step) {
+          for (let xx = x + 4; xx < x + ww; xx += step) {
+            ctx.beginPath();
+            ctx.arc(xx, yy, 1.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      });
+    }
+
+    function patternCrossX(x, y, ww, hh){
+      withClipRect(x, y, ww, hh, () => {
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.lineWidth = 2;
+        const step = 14;
+        for (let yy = y - hh; yy < y + hh * 2; yy += step) {
+          for (let xx = x - ww; xx < x + ww * 2; xx += step) {
+            ctx.beginPath();
+            ctx.moveTo(xx, yy);
+            ctx.lineTo(xx + 10, yy + 10);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(xx + 10, yy);
+            ctx.lineTo(xx, yy + 10);
+            ctx.stroke();
+          }
+        }
+      });
+    }
+
+    function patternDiagonal(x, y, ww, hh){
+      withClipRect(x, y, ww, hh, () => {
+        ctx.strokeStyle = 'rgba(0,0,0,0.90)';
+        ctx.lineWidth = 2;
+        const step = 10;
+        for (let xx = x - hh; xx < x + ww + hh; xx += step) {
+          ctx.beginPath();
+          ctx.moveTo(xx, y + hh);
+          ctx.lineTo(xx + hh, y);
+          ctx.stroke();
+        }
+      });
+    }
+
+    // --------------------------------------------------
+    // VISUAL STACK HEIGHTS (linear inside bar)
+    // Make optimization ~1/2 of total bar height (requested earlier)
+    // NOTE: stack flipped: TOP deployment, BOTTOM optimization
+    // --------------------------------------------------
+    const yBarBottom = yAt(1);
+    const yBarTop    = yAt(OPT_TOTAL);
+    const barPixH = yBarBottom - yBarTop;
+
+    const deployPixH = barPixH * 0.50;
+    const optPixH    = barPixH * 0.50;
+
+    const yDeployTopPix = yBarTop;
+    const yDeployBotPix = yDeployTopPix + deployPixH;
+
+    const yOptTopPix = yDeployBotPix;
+    const yOptBotPix = yOptTopPix + optPixH;
+
+    // --- Deployment (TOP, light green, solid) ---
+    ctx.save();
+    ctx.fillStyle = DEPLOY_COLOR;
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = OUTLINE_W;
+    ctx.beginPath();
+    ctx.rect(bx0, yDeployTopPix, barW, yDeployBotPix - yDeployTopPix);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // --- Optimization (BOTTOM, dark green) base ---
+    ctx.save();
+    ctx.fillStyle = OPT_COLOR;
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = OUTLINE_W;
+    ctx.beginPath();
+    ctx.rect(bx0, yOptTopPix, barW, yOptBotPix - yOptTopPix);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // split optimization block linearly (bottom-up): applicator, amender, lock
+    const optSum = optParts.applicator + optParts.amender + optParts.lock;
+    const appPix  = optPixH * (optParts.applicator / optSum);
+    const amePix  = optPixH * (optParts.amender    / optSum);
+    const lockPix = optPixH * (optParts.lock       / optSum);
+
+    const yAppTop  = yOptBotPix - appPix;
+    const yAmeTop  = yAppTop - amePix;
+    const yLockTop = yAmeTop - lockPix;
+
+    function drawOptPart(yTop, yBot, patternFn){
+      const hh = (yBot - yTop);
+      ctx.save();
+      ctx.fillStyle = OPT_COLOR;
+      ctx.strokeStyle = OUTLINE;
+      ctx.lineWidth = OUTLINE_W;
+      ctx.beginPath();
+      ctx.rect(bx0, yTop, barW, hh);
+      ctx.fill();
+      ctx.stroke();
+      patternFn(bx0, yTop, barW, hh);
+      ctx.restore();
+    }
+
+    drawOptPart(yAppTop, yOptBotPix, patternDots);       // applicator
+    drawOptPart(yAmeTop, yAppTop, patternCrossX);        // amender
+    drawOptPart(yLockTop, yAmeTop, patternDiagonal);     // lock
+
+    // vertical label "6.1" inside OPTIMIZATION? (No: keep in deployment segment like screenshot had)
+    // You asked only to flip the bar. We'll keep the 6.1 label in the deployment block? That would be wrong.
+    // So keep 6.1 on the segment representing deployment VALUE (deployment is top now).
+    function verticalLabel(text, yMid){
+      ctx.save();
+      ctx.translate(cx, yMid);
+      ctx.rotate(-Math.PI / 2);
+      ctx.font = '900 22px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+    verticalLabel('6.1', (yDeployTopPix + yDeployBotPix) / 2);
+
+    // blue number above
+    ctx.save();
+    ctx.font = '900 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = '#123cff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(OPT_LABEL, cx, yDeployTopPix - 6);
+    ctx.restore();
+
+    // y axis label
+    ctx.save();
+    ctx.translate(18, (y0 + y1) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.70)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('deployment-latency (s)', 0, 0);
+    ctx.restore();
+
+    // --------------------------------------------------
+    // LEGEND: keep order as before (Optimization then Deployment)
+    // + pattern-only subitems
+    // --------------------------------------------------
+    const lx = x1 - 210;
+    const ly = y0 + 8;
+    const sw = 34, sh = 18;
+
+    function legendSwatch(y, fill, patternFn, patternOnly=false){
+      ctx.save();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = OUTLINE;
+      ctx.fillStyle = patternOnly ? 'rgba(255,255,255,0.95)' : fill;
+
+      ctx.beginPath();
+      ctx.rect(lx, y, sw, sh);
+      ctx.fill();
+      ctx.stroke();
+
+      if (patternFn) patternFn(lx, y, sw, sh);
+      ctx.restore();
+    }
+
+    function legendText(y, label){
+      ctx.save();
+      ctx.font = '800 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx + sw + 10, y + sh / 2);
+      ctx.restore();
+    }
+
+    legendSwatch(ly, DEPLOY_COLOR, null, false);
+    legendText(ly, 'Deployment');
+
+    legendSwatch(ly + 26, OPT_COLOR, null, false);
+    legendText(ly + 26, 'Optimization');
+
+    const subY = ly + 58;
+
+    legendSwatch(subY, OPT_COLOR, patternDiagonal, true);
+    legendText(subY, 'Applicator');
+
+    legendSwatch(subY + 22, OPT_COLOR, patternCrossX, true);
+    legendText(subY + 22, 'Amender');
+
+    legendSwatch(subY + 44, OPT_COLOR, patternDots, true);
+    legendText(subY + 44, 'Lock');
+
+    return;
+  }
+
+  // ==========================================================
+  // HOLISTIC (your current holistic code continues below unchanged)
+  // ==========================================================
+
+  const OPT_TOTAL = 20.0;
+  const DEPLOY = 10.0;
+  const OVERALL = 30.0;
+
+  const optParts = { applicator: 6.0, amender: 10.0, lock: 4.0 };
+
+  const DEPLOY_COLOR = '#ff9a2a'; // light
+  const OPT_COLOR    = '#d96a00'; // dark
 
   const Y_MIN2 = 1;
   const Y_MAX2 = 1e3;
@@ -1542,45 +1899,128 @@ function drawDeploymentLatencyStatic(){
   const barW = Math.min(86, Math.max(58, (x1 - x0) * 0.20));
   const bx0 = cx - barW / 2;
 
-  const yBase = yAt(1);
-  const yDeploy = yAt(DEPLOY);
-  const yTop = yAt(OPT_TOTAL);
+  const OUTLINE = 'rgba(0,0,0,0.85)';
+  const OUTLINE_W = 3;
 
-  // bottom: Deployment (solid)
-  ctx.save();
-  ctx.fillStyle = BAR_COLOR;
-  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-  ctx.lineWidth = 3;
-
-  ctx.beginPath();
-  ctx.rect(bx0, yDeploy, barW, yBase - yDeploy);
-  ctx.fill();
-  ctx.stroke();
-
-  // top: Optimization (hatched)
-  ctx.beginPath();
-  ctx.rect(bx0, yTop, barW, yDeploy - yTop);
-  ctx.fillStyle = BAR_COLOR;
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(bx0, yTop, barW, yDeploy - yTop);
-  ctx.clip();
-
-  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-  ctx.lineWidth = 2;
-  const step = 10;
-  for (let x = bx0 - (yBase); x < bx0 + barW + (yBase); x += step) {
+  function withClipRect(x, y, ww, hh, fn){
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(x, yBase);
-    ctx.lineTo(x + (yBase - y0), y0);
-    ctx.stroke();
+    ctx.rect(x, y, ww, hh);
+    ctx.clip();
+    fn();
+    ctx.restore();
   }
+
+  function patternDots(x, y, ww, hh){
+    withClipRect(x, y, ww, hh, () => {
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      const step = 10;
+      for (let yy = y + 4; yy < y + hh; yy += step) {
+        for (let xx = x + 4; xx < x + ww; xx += step) {
+          ctx.beginPath();
+          ctx.arc(xx, yy, 1.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    });
+  }
+
+  function patternCrossX(x, y, ww, hh){
+    withClipRect(x, y, ww, hh, () => {
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 2;
+      const step = 14;
+      for (let yy = y - hh; yy < y + hh * 2; yy += step) {
+        for (let xx = x - ww; xx < x + ww * 2; xx += step) {
+          ctx.beginPath();
+          ctx.moveTo(xx, yy);
+          ctx.lineTo(xx + 10, yy + 10);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(xx + 10, yy);
+          ctx.lineTo(xx, yy + 10);
+          ctx.stroke();
+        }
+      }
+    });
+  }
+
+  function patternDiagonal(x, y, ww, hh){
+    withClipRect(x, y, ww, hh, () => {
+      ctx.strokeStyle = 'rgba(0,0,0,0.90)';
+      ctx.lineWidth = 2;
+      const step = 10;
+      for (let xx = x - hh; xx < x + ww + hh; xx += step) {
+        ctx.beginPath();
+        ctx.moveTo(xx, y + hh);
+        ctx.lineTo(xx + hh, y);
+        ctx.stroke();
+      }
+    });
+  }
+
+  const yBarBottom = yAt(1);
+  const yBarTop    = yAt(OVERALL);
+  const barPixH = yBarBottom - yBarTop;
+
+  const deployPixH = barPixH * (DEPLOY / OVERALL);
+  const optPixH    = barPixH * (OPT_TOTAL / OVERALL);
+
+  const yDeployTop = yBarTop;
+  const yDeployBot = yDeployTop + deployPixH;
+
+  const yOptTop = yDeployBot;
+  const yOptBot = yOptTop + optPixH;
+
+  // Deployment
+  ctx.save();
+  ctx.fillStyle = DEPLOY_COLOR;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = OUTLINE_W;
+  ctx.beginPath();
+  ctx.rect(bx0, yDeployTop, barW, yDeployBot - yDeployTop);
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 
-  // white vertical number in deployment segment (smaller)
+  // Optimization base
+  ctx.save();
+  ctx.fillStyle = OPT_COLOR;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = OUTLINE_W;
+  ctx.beginPath();
+  ctx.rect(bx0, yOptTop, barW, yOptBot - yOptTop);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  const optSum = optParts.applicator + optParts.amender + optParts.lock;
+  const appPix  = optPixH * (optParts.applicator / optSum);
+  const amePix  = optPixH * (optParts.amender    / optSum);
+  const lockPix = optPixH * (optParts.lock       / optSum);
+
+  const yAppTop  = yOptBot - appPix;
+  const yAmeTop  = yAppTop - amePix;
+  const yLockTop = yAmeTop - lockPix;
+
+  function drawOptPart(yTop, yBot, patternFn){
+    const hh = (yBot - yTop);
+    ctx.save();
+    ctx.fillStyle = OPT_COLOR;
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = OUTLINE_W;
+    ctx.beginPath();
+    ctx.rect(bx0, yTop, barW, hh);
+    ctx.fill();
+    ctx.stroke();
+    patternFn(bx0, yTop, barW, hh);
+    ctx.restore();
+  }
+
+  drawOptPart(yAppTop, yOptBot, patternDots);
+  drawOptPart(yAmeTop, yAppTop, patternCrossX);
+  drawOptPart(yLockTop, yAmeTop, patternDiagonal);
+
   function verticalLabel(text, yMid){
     ctx.save();
     ctx.translate(cx, yMid);
@@ -1592,18 +2032,16 @@ function drawDeploymentLatencyStatic(){
     ctx.fillText(text, 0, 0);
     ctx.restore();
   }
-  verticalLabel(isHolistic ? '10.4' : '6.1', (yBase + yDeploy) / 2);
+  verticalLabel('10', (yDeployTop + yDeployBot) / 2);
 
-  // blue number above (smaller) -> 12 for incremental, 11 for holistic
   ctx.save();
   ctx.font = '900 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
   ctx.fillStyle = '#123cff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(OPT_LABEL, cx, yTop - 6);
+  ctx.fillText('30', cx, yDeployTop - 6);
   ctx.restore();
 
-  // y axis label (deployment-latency)
   ctx.save();
   ctx.translate(18, (y0 + y1) / 2);
   ctx.rotate(-Math.PI / 2);
@@ -1614,37 +2052,27 @@ function drawDeploymentLatencyStatic(){
   ctx.fillText('deployment-latency (s)', 0, 0);
   ctx.restore();
 
-  // legend (top-right)
-  const lx = x1 - 140;
+  const lx = x1 - 210;
   const ly = y0 + 8;
+  const sw = 34, sh = 18;
 
-  function legendItem(y, label, hatched){
-    const sw = 34, sh = 18;
+  function legendSwatch(y, fill, patternFn, patternOnly=false){
     ctx.save();
     ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillStyle = BAR_COLOR;
+    ctx.strokeStyle = OUTLINE;
+    ctx.fillStyle = patternOnly ? 'rgba(255,255,255,0.95)' : fill;
+
     ctx.beginPath();
     ctx.rect(lx, y, sw, sh);
     ctx.fill();
     ctx.stroke();
 
-    if (hatched) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(lx, y, sw, sh);
-      ctx.clip();
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.lineWidth = 2;
-      for (let x = lx - 20; x < lx + sw + 20; x += 8) {
-        ctx.beginPath();
-        ctx.moveTo(x, y + sh);
-        ctx.lineTo(x + sh + 20, y - 20);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
+    if (patternFn) patternFn(lx, y, sw, sh);
+    ctx.restore();
+  }
 
+  function legendText(y, label){
+    ctx.save();
     ctx.font = '800 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.textAlign = 'left';
@@ -1653,11 +2081,24 @@ function drawDeploymentLatencyStatic(){
     ctx.restore();
   }
 
-  legendItem(ly, 'Optimization', true);
-  legendItem(ly + 26, 'Deployment', false);
+  legendSwatch(ly, DEPLOY_COLOR, null, false);
+  legendText(ly, 'Deployment');
 
-  ctx.restore();
+  legendSwatch(ly + 26, OPT_COLOR, null, false);
+  legendText(ly + 26, 'Optimization');
+
+  const subY = ly + 58;
+
+  legendSwatch(subY, OPT_COLOR, patternDiagonal, true);
+  legendText(subY, 'Applicator');
+
+  legendSwatch(subY + 22, OPT_COLOR, patternCrossX, true);
+  legendText(subY + 22, 'Amender');
+
+  legendSwatch(subY + 44, OPT_COLOR, patternDots, true);
+  legendText(subY + 44, 'Lock');
 }
+
 
 function renderDeployGraph(){
   resizeDeployCanvasToCSS();
@@ -2137,11 +2578,13 @@ function startExperiment(){
 
     if (activeConfig.reconfigMode === 'incremental') {
       const baseline = genBaseline();
-      if (topoEvent) exp.points.push({ tSec, v: clampY(3000) });
-      else exp.points.push({ tSec, v: baseline });
+      if (topoEvent) {
+        const spike = 900 + Math.random() * 250; // ~900–1150
+        exp.points.push({ tSec, v: clampY(spike) });
+      } else {
+        exp.points.push({ tSec, v: baseline });
+      }
     }
-
-    if (exp.points.length > exp.maxPoints) exp.points.splice(0, exp.points.length - exp.maxPoints);
 
     if (scenario.shots) renderGraph();
   }, 10);
