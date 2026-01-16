@@ -566,7 +566,12 @@
     </div>
 
     <div id="snapshotsBox"></div>
-
+    <div id="deployCaptureHidden"
+         style="position:fixed; left:-10000px; top:-10000px; width:800px; height:300px; opacity:0; pointer-events:none;">
+      <canvas id="deployCanvas"
+              width="800" height="300"
+              style="width:800px; height:300px; border-radius:8px;"></canvas>
+    </div>
     <!-- WRAP BOTH GRAPHS so we can hide on stop -->
     <div id="liveGraphsSection">
       <div class="hr"></div>
@@ -578,23 +583,7 @@
       <div id="graphBox">
         <canvas id="graphCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
       </div>
-
-      <div class="hr"></div>
-
-      <div class="panelHeader" style="margin-bottom:6px; align-items:center;">
-        <div class="panelTitle">Deployment latency</div>
-        <div class="small" id="deployGraphTitle" style="text-align:right;">—</div>
-      </div>
-
-      <div class="small" style="opacity:0.75; margin-bottom:8px;">
-        Static (placeholder) — captured into snapshots on Stop
-      </div>
-
-      <div id="deployGraphBox">
-        <canvas id="deployCanvas" width="420" height="250" style="width:100%; height:100%; border-radius:8px;"></canvas>
-      </div>
     </div>
-
   </div>
 </div>
 
@@ -1228,7 +1217,7 @@ function applyScenarioLayout(){
   document.body.classList.toggle('splitMode', split);
   document.body.classList.remove('soloTopo', 'soloShots');
 
-  if (shotsOn) { renderGraph(); renderDeployGraph(); }
+  if (shotsOn) { renderGraph(); }
   if (topoOn) renderTopology();
 
   setMapOverlayVisible(mapOn);
@@ -1459,10 +1448,10 @@ if (points.length >= 2) {
   ctx.fillText('event-time latency', 0, 0);
   ctx.restore();
 
-  ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';   // keep same tone (or 0.70 if you prefer)
   const status = exp.running ? (exp.frozen ? 'RUNNING (graph frozen)' : 'RUNNING') : 'STOPPED';
-  ctx.fillText(status, x0 + 6, y0 + 12);
+  ctx.fillText(status, x1, y0);
 
   ctx.textAlign = 'right';
   const rt = exp.running ? ((nowMs() - exp.startMs)/1000) : ((exp.stopMs - exp.startMs)/1000);
@@ -2417,7 +2406,7 @@ function renderSnapshotsList(){
 
       const t = document.createElement('div');
       t.className = 'shotTileTitle';
-      t.textContent = `${snap.title} — ${snap.kind === 'event' ? 'Event-time' : 'Deployment'}`;
+      t.textContent = `${snap.title} — ${snap.kind === 'event' ? 'Event-time' : 'Aggregated overhead'}`;
 
       const m = document.createElement('div');
       m.className = 'shotMeta';
@@ -2589,7 +2578,7 @@ function startExperiment(){
     if (scenario.shots) renderGraph();
   }, 10);
 
-  if (scenario.shots) { renderGraph(); renderDeployGraph(); }
+  if (scenario.shots) { renderGraph(); }
 }
 
 function stopExperiment(){
